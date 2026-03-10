@@ -3,64 +3,61 @@ import {
   collection,
   doc,
   getDocs,
+  query,
   serverTimestamp,
   updateDoc,
-  query,
   where,
 } from "firebase/firestore";
 
 import { db } from "./config";
 
-const emailsCollection = collection(db, "emails_clientes");
+const rastreadoresCollection = collection(db, "rastreadores");
 
-function normalizarEmails(valor) {
-  if (Array.isArray(valor)) {
-    return [
-      ...new Set(
-        valor.map((email) => String(email).trim()).filter(Boolean),
-      ),
-    ];
-  }
-
-  return [
-    ...new Set(
-      String(valor || "")
-        .split(/[\n,;]+/)
-        .map((email) => email.trim())
-        .filter(Boolean),
-    ),
-  ];
+function normalizarTexto(valor) {
+  return String(valor || "").trim();
 }
 
 function prepararPayload(registro) {
   return {
-    clienteId: String(registro.clienteId || "").trim(),
-    clienteNome: String(registro.clienteNome || "").trim(),
-    emails: normalizarEmails(registro.emails),
+    clienteId: normalizarTexto(registro.clienteId),
+    clienteNome: normalizarTexto(registro.clienteNome),
+    rastreador: normalizarTexto(registro.rastreador),
+    email: normalizarTexto(registro.email),
+    login: normalizarTexto(registro.login),
+    senha: normalizarTexto(registro.senha),
+    linkAcesso: normalizarTexto(registro.linkAcesso),
     ativo: registro.ativo ?? true,
   };
 }
 
 function ordenarRegistros(registros) {
-  return registros.sort((a, b) =>
-    String(a.clienteNome || "").localeCompare(
-      String(b.clienteNome || ""),
-      "pt-BR",
-      {
+  return registros.sort((a, b) => {
+    const clienteA = String(a.clienteNome || "");
+    const clienteB = String(b.clienteNome || "");
+
+    const comparacaoCliente = clienteA.localeCompare(clienteB, "pt-BR", {
+      sensitivity: "base",
+    });
+
+    if (comparacaoCliente !== 0) {
+      return comparacaoCliente;
+    }
+
+    return String(a.rastreador || a.nome || "")
+      .localeCompare(String(b.rastreador || b.nome || ""), "pt-BR", {
         sensitivity: "base",
-      },
-    ),
-  );
+      });
+  });
 }
 
-export async function buscarEmailsClientes({
+export async function buscarRastreadores({
   isAdminOuGestor = false,
   clienteIds = [],
 } = {}) {
   let registros = [];
 
   if (isAdminOuGestor) {
-    const snapshot = await getDocs(emailsCollection);
+    const snapshot = await getDocs(rastreadoresCollection);
 
     registros = snapshot.docs.map((documento) => ({
       id: documento.id,
@@ -75,7 +72,7 @@ export async function buscarEmailsClientes({
 
     const consultas = await Promise.all(
       idsValidos.map((clienteId) =>
-        getDocs(query(emailsCollection, where("clienteId", "==", clienteId))),
+        getDocs(query(rastreadoresCollection, where("clienteId", "==", clienteId))),
       ),
     );
 
@@ -96,10 +93,10 @@ export async function buscarEmailsClientes({
   return ordenarRegistros(registrosUnicos);
 }
 
-export async function criarEmailsCliente(registro) {
+export async function criarRastreador(registro) {
   const payload = prepararPayload(registro);
 
-  await addDoc(emailsCollection, {
+  await addDoc(rastreadoresCollection, {
     ...payload,
     excluido: false,
     excluidoEm: null,
@@ -109,10 +106,10 @@ export async function criarEmailsCliente(registro) {
   });
 }
 
-export async function atualizarEmailsCliente(id, registro) {
+export async function atualizarRastreador(id, registro) {
   const payload = prepararPayload(registro);
 
-  const registroRef = doc(db, "emails_clientes", id);
+  const registroRef = doc(db, "rastreadores", id);
 
   await updateDoc(registroRef, {
     ...payload,
@@ -120,8 +117,8 @@ export async function atualizarEmailsCliente(id, registro) {
   });
 }
 
-export async function excluirEmailsCliente(id, usuarioUid = null) {
-  const registroRef = doc(db, "emails_clientes", id);
+export async function excluirRastreador(id, usuarioUid = null) {
+  const registroRef = doc(db, "rastreadores", id);
 
   await updateDoc(registroRef, {
     excluido: true,

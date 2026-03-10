@@ -6,6 +6,7 @@ import {
   criarCliente,
   excluirCliente,
 } from "../services/firebase/clientes";
+import { buscarUsuarios } from "../services/firebase/usuarios";
 import { ehAdminOuGestor } from "../utils/permissoes";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -17,13 +18,17 @@ const CLIENTE_INICIAL = {
   tipoProcessamento: "A disposição",
   folgaFora: false,
   temDiarias: false,
-  operador: "",
-  assistente: "",
-  analista: "",
+  operadorId: "",
+  operadorNome: "",
+  assistenteId: "",
+  assistenteNome: "",
+  analistaId: "",
+  analistaNome: "",
   envioSemanal: false,
   dataCorteDia: 20,
   observacao: "",
   clienteAcessaSistema: false,
+  linkNossoSistema: "",
   regraEspecifica: "",
   ativo: true,
 };
@@ -67,6 +72,66 @@ function resumirTexto(valor, limite = 40) {
   return `${texto.slice(0, limite)}...`;
 }
 
+function normalizarTexto(valor) {
+  return String(valor || "")
+    .trim()
+    .toLowerCase();
+}
+
+function obterRoleUsuario(usuario) {
+  return normalizarTexto(usuario?.roles || usuario?.role);
+}
+
+function podeAssumirFuncaoNoCliente(usuario, funcao) {
+  const role = obterRoleUsuario(usuario);
+
+  if (funcao === "operador") {
+    return ["operador", "gestor", "admin"].includes(role);
+  }
+
+  if (funcao === "analista") {
+    return ["analista", "gestor", "admin"].includes(role);
+  }
+
+  if (funcao === "assistente") {
+    return ["assistente", "gestor", "admin"].includes(role);
+  }
+
+  return false;
+}
+
+function ordenarUsuariosParaVinculo(a, b) {
+  const ativoA = a.ativo !== false;
+  const ativoB = b.ativo !== false;
+
+  if (ativoA !== ativoB) {
+    return ativoA ? -1 : 1;
+  }
+
+  return String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR", {
+    sensitivity: "base",
+  });
+}
+
+function obterLabelUsuarioVinculo(usuario) {
+  if (!usuario) return "-";
+  return usuario.ativo === false ? `${usuario.nome} (inativo)` : usuario.nome;
+}
+
+function montarUsuariosDisponiveis(
+  usuarios,
+  funcao,
+  usuarioSelecionadoId = "",
+) {
+  return usuarios
+    .filter(
+      (usuario) =>
+        podeAssumirFuncaoNoCliente(usuario, funcao) &&
+        (usuario.ativo !== false || usuario.id === usuarioSelecionadoId),
+    )
+    .sort(ordenarUsuariosParaVinculo);
+}
+
 function normalizarClienteParaFormulario(cliente) {
   return {
     nome: cliente.nome || "",
@@ -74,28 +139,90 @@ function normalizarClienteParaFormulario(cliente) {
     tipoProcessamento: cliente.tipoProcessamento || "A disposição",
     folgaFora: Boolean(cliente.folgaFora),
     temDiarias: Boolean(cliente.temDiarias),
-    operador: cliente.operador || "",
-    assistente: cliente.assistente || "",
-    analista: cliente.analista || "",
+    operadorId: cliente.operadorId || "",
+    operadorNome: cliente.operadorNome || cliente.operador || "",
+    assistenteId: cliente.assistenteId || "",
+    assistenteNome: cliente.assistenteNome || cliente.assistente || "",
+    analistaId: cliente.analistaId || "",
+    analistaNome: cliente.analistaNome || cliente.analista || "",
     envioSemanal: Boolean(cliente.envioSemanal),
     dataCorteDia: cliente.dataCorteDia || 20,
     observacao: cliente.observacao || "",
     clienteAcessaSistema: Boolean(cliente.clienteAcessaSistema),
+    linkNossoSistema: cliente.linkNossoSistema || "",
     regraEspecifica: cliente.regraEspecifica || "",
     ativo: cliente.ativo ?? true,
   };
+}
+
+function clientePertenceAoUsuario(cliente, user, userData) {
+  const role = normalizarTexto(userData?.roles);
+  const nomeUsuario = normalizarTexto(userData?.nome);
+  const uid = user?.uid || "";
+
+  if (!uid || !role) return false;
+
+  if (role === "operador") {
+    return (
+      cliente.operadorId === uid ||
+      (!cliente.operadorId &&
+        normalizarTexto(cliente.operadorNome || cliente.operador) ===
+          nomeUsuario)
+    );
+  }
+
+  if (role === "analista") {
+    return (
+      cliente.analistaId === uid ||
+      (!cliente.analistaId &&
+        normalizarTexto(cliente.analistaNome || cliente.analista) ===
+          nomeUsuario)
+    );
+  }
+
+  if (role === "assistente") {
+    return (
+      cliente.assistenteId === uid ||
+      (!cliente.assistenteId &&
+        normalizarTexto(cliente.assistenteNome || cliente.assistente) ===
+          nomeUsuario)
+    );
+  }
+
+  return false;
+}
+
+function ordenarClientesPorDataCorte(a, b) {
+  const corteA =
+    Number.isFinite(Number(a.dataCorteDia)) && Number(a.dataCorteDia) > 0
+      ? Number(a.dataCorteDia)
+      : 999;
+
+  const corteB =
+    Number.isFinite(Number(b.dataCorteDia)) && Number(b.dataCorteDia) > 0
+      ? Number(b.dataCorteDia)
+      : 999;
+
+  if (corteA !== corteB) {
+    return corteA - corteB;
+  }
+
+  return String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR", {
+    sensitivity: "base",
+  });
 }
 
 function Clientes() {
   const { user, userData, loading } = useAuth();
 
   const [clientes, setClientes] = useState([]);
+  const [usuarios, setUsuarios] = useState([]);
   const [carregandoLista, setCarregandoLista] = useState(true);
   const [erroLista, setErroLista] = useState("");
 
   const [filtroAnalista, setFiltroAnalista] = useState("Todos");
   const [filtroCorte, setFiltroCorte] = useState("Todos");
-  const [filtroProcessamento, setFiltroProcessamento] = useState("Todos");
+  const [filtroOperador, setFiltroOperador] = useState("Todos");
   const [busca, setBusca] = useState("");
 
   const [modalAberto, setModalAberto] = useState(false);
@@ -107,13 +234,24 @@ function Clientes() {
 
   const podeGerenciarClientes = ehAdminOuGestor(userData);
 
-  async function carregarClientes() {
+  async function carregarDados() {
     try {
       setCarregandoLista(true);
       setErroLista("");
 
-      const dados = await buscarClientes();
-      setClientes(dados);
+      const dadosClientes = await buscarClientes({
+        role: userData?.roles,
+        uid: user?.uid,
+        isAdminOuGestor: podeGerenciarClientes,
+      });
+      setClientes(dadosClientes);
+
+      if (podeGerenciarClientes) {
+        const dadosUsuarios = await buscarUsuarios();
+        setUsuarios(dadosUsuarios);
+      } else {
+        setUsuarios([]);
+      }
     } catch (error) {
       console.error("ERRO ao buscar clientes:", error);
       setErroLista("Não foi possível carregar os clientes.");
@@ -123,56 +261,100 @@ function Clientes() {
   }
 
   useEffect(() => {
-    carregarClientes();
-  }, []);
+    if (!loading) {
+      carregarDados();
+    }
+  }, [loading, podeGerenciarClientes]);
+
+  const clientesVisiveis = useMemo(() => {
+    if (podeGerenciarClientes) {
+      return clientes;
+    }
+
+    return clientes.filter((cliente) =>
+      clientePertenceAoUsuario(cliente, user, userData),
+    );
+  }, [clientes, podeGerenciarClientes, user, userData]);
 
   const analistasDisponiveis = useMemo(() => {
     return [
-      ...new Set(clientes.map((cliente) => cliente.analista).filter(Boolean)),
+      ...new Set(
+        clientesVisiveis
+          .map((cliente) => cliente.analistaNome || cliente.analista)
+          .filter(Boolean),
+      ),
     ].sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }));
-  }, [clientes]);
+  }, [clientesVisiveis]);
 
   const datasCorteDisponiveis = useMemo(() => {
     return [
       ...new Set(
-        clientes.map((cliente) => cliente.dataCorteDia).filter(Boolean),
+        clientesVisiveis.map((cliente) => cliente.dataCorteDia).filter(Boolean),
       ),
     ].sort((a, b) => a - b);
-  }, [clientes]);
+  }, [clientesVisiveis]);
+
+  const operadoresFiltroDisponiveis = useMemo(() => {
+    return [
+      ...new Set(
+        clientesVisiveis
+          .map((cliente) => cliente.operadorNome || cliente.operador)
+          .filter(Boolean),
+      ),
+    ].sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }));
+  }, [clientesVisiveis]);
+
+  const operadoresDisponiveis = useMemo(() => {
+    return montarUsuariosDisponiveis(usuarios, "operador", form.operadorId);
+  }, [usuarios, form.operadorId]);
+
+  const analistasCadastroDisponiveis = useMemo(() => {
+    return montarUsuariosDisponiveis(usuarios, "analista", form.analistaId);
+  }, [usuarios, form.analistaId]);
+
+  const assistentesDisponiveis = useMemo(() => {
+    return montarUsuariosDisponiveis(usuarios, "assistente", form.assistenteId);
+  }, [usuarios, form.assistenteId]);
 
   const clientesFiltrados = useMemo(() => {
     const textoBusca = busca.trim().toLowerCase();
     const buscaNumerica = somenteNumeros(busca);
 
-    return clientes.filter((cliente) => {
-      const nomeMatch = String(cliente.nome || "")
-        .toLowerCase()
-        .includes(textoBusca);
+    return clientesVisiveis
+      .filter((cliente) => {
+        const nomeMatch = String(cliente.nome || "")
+          .toLowerCase()
+          .includes(textoBusca);
 
-      const cnpjMatch = String(cliente.cnpj || "").includes(buscaNumerica);
+        const cnpjMatch = String(cliente.cnpj || "").includes(buscaNumerica);
 
-      const passouBusca =
-        !textoBusca || nomeMatch || (buscaNumerica.length > 0 && cnpjMatch);
+        const passouBusca =
+          !textoBusca || nomeMatch || (buscaNumerica.length > 0 && cnpjMatch);
 
-      const passouAnalista =
-        filtroAnalista === "Todos" || cliente.analista === filtroAnalista;
+        const nomeAnalista = cliente.analistaNome || cliente.analista || "";
 
-      const passouCorte =
-        filtroCorte === "Todos" ||
-        Number(cliente.dataCorteDia) === Number(filtroCorte);
+        const passouAnalista =
+          filtroAnalista === "Todos" || nomeAnalista === filtroAnalista;
 
-      const passouProcessamento =
-        filtroProcessamento === "Todos" ||
-        cliente.tipoProcessamento === filtroProcessamento;
+        const passouCorte =
+          filtroCorte === "Todos" ||
+          Number(cliente.dataCorteDia) === Number(filtroCorte);
 
-      return (
-        passouBusca &&
-        passouAnalista &&
-        passouCorte &&
-        passouProcessamento
-      );
-    });
-  }, [clientes, busca, filtroAnalista, filtroCorte, filtroProcessamento]);
+        const nomeOperador = cliente.operadorNome || cliente.operador || "";
+
+        const passouOperador =
+          filtroOperador === "Todos" || nomeOperador === filtroOperador;
+
+        return passouBusca && passouAnalista && passouCorte && passouOperador;
+      })
+      .sort(ordenarClientesPorDataCorte);
+  }, [
+    clientesVisiveis,
+    busca,
+    filtroAnalista,
+    filtroCorte,
+    filtroOperador,
+  ]);
 
   function abrirNovoCliente() {
     if (!podeGerenciarClientes) {
@@ -210,7 +392,7 @@ function Clientes() {
   function limparFiltros() {
     setFiltroAnalista("Todos");
     setFiltroCorte("Todos");
-    setFiltroProcessamento("Todos");
+    setFiltroOperador("Todos");
     setBusca("");
   }
 
@@ -239,6 +421,21 @@ function Clientes() {
     }));
   }
 
+  function handleUsuarioVinculadoChange(campoId, campoNome, listaUsuarios) {
+    return (event) => {
+      const usuarioId = event.target.value;
+      const usuarioSelecionado = listaUsuarios.find(
+        (usuarioItem) => usuarioItem.id === usuarioId,
+      );
+
+      setForm((estadoAtual) => ({
+        ...estadoAtual,
+        [campoId]: usuarioId,
+        [campoNome]: usuarioSelecionado?.nome || "",
+      }));
+    };
+  }
+
   function validarFormulario() {
     if (!form.nome.trim()) {
       return "Preencha o nome do cliente.";
@@ -248,8 +445,8 @@ function Clientes() {
       return "Preencha um CNPJ válido com 14 números.";
     }
 
-    if (!form.analista.trim()) {
-      return "Preencha o nome do analista.";
+    if (!form.analistaId) {
+      return "Selecione o analista do cliente.";
     }
 
     if (
@@ -288,7 +485,7 @@ function Clientes() {
         await criarCliente(form);
       }
 
-      await carregarClientes();
+      await carregarDados();
       fecharModal(true);
     } catch (error) {
       console.error("ERRO ao salvar cliente:", error);
@@ -313,7 +510,7 @@ function Clientes() {
     try {
       setExcluindoId(cliente.id);
       await excluirCliente(cliente.id, user?.uid || null);
-      await carregarClientes();
+      await carregarDados();
     } catch (error) {
       console.error("ERRO ao excluir cliente:", error);
       alert("Não foi possível excluir o cliente.");
@@ -338,7 +535,6 @@ function Clientes() {
     <section className="page">
       <div className="page-header">
         <div>
-          <p className="page-header__eyebrow">Módulo 01</p>
           <h1>Clientes</h1>
           <p className="page-header__description">
             Aqui você cadastra, edita, filtra e organiza todos os clientes da
@@ -408,16 +604,16 @@ function Clientes() {
           </div>
 
           <div className="field">
-            <label htmlFor="filtro-processamento">Tipo de processamento</label>
+            <label htmlFor="filtro-operador">Operador</label>
             <select
-              id="filtro-processamento"
-              value={filtroProcessamento}
-              onChange={(event) => setFiltroProcessamento(event.target.value)}
+              id="filtro-operador"
+              value={filtroOperador}
+              onChange={(event) => setFiltroOperador(event.target.value)}
             >
               <option value="Todos">Todos</option>
-              {TIPOS_PROCESSAMENTO.map((tipo) => (
-                <option key={tipo} value={tipo}>
-                  {tipo}
+              {operadoresFiltroDisponiveis.map((operador) => (
+                <option key={operador} value={operador}>
+                  {operador}
                 </option>
               ))}
             </select>
@@ -486,7 +682,12 @@ function Clientes() {
 
                 <tbody>
                   {clientesFiltrados.map((cliente) => (
-                    <tr key={cliente.id}>
+                    <tr
+                      key={cliente.id}
+                      className={
+                        cliente.ativo ? "" : "clientes-table__row--inativo"
+                      }
+                    >
                       {podeGerenciarClientes ? (
                         <td>
                           <div className="clientes-actions">
@@ -520,9 +721,11 @@ function Clientes() {
                       </td>
 
                       <td>{formatarCNPJExibicao(cliente.cnpj)}</td>
-                      <td>{cliente.analista || "-"}</td>
-                      <td>{cliente.assistente || "-"}</td>
-                      <td>{cliente.operador || "-"}</td>
+                      <td>{cliente.analistaNome || cliente.analista || "-"}</td>
+                      <td>
+                        {cliente.assistenteNome || cliente.assistente || "-"}
+                      </td>
+                      <td>{cliente.operadorNome || cliente.operador || "-"}</td>
 
                       <td>
                         <span className="clientes-badge">
@@ -535,7 +738,17 @@ function Clientes() {
                       <td>{booleanParaTexto(cliente.envioSemanal)}</td>
                       <td>{booleanParaTexto(cliente.clienteAcessaSistema)}</td>
                       <td>Dia {cliente.dataCorteDia || "-"}</td>
-                      <td>{cliente.ativo ? "Ativo" : "Inativo"}</td>
+                      <td>
+                        <span
+                          className={`clientes-status ${
+                            cliente.ativo
+                              ? "clientes-status--ativo"
+                              : "clientes-status--inativo"
+                          }`}
+                        >
+                          {cliente.ativo ? "Ativo" : "Inativo"}
+                        </span>
+                      </td>
 
                       <td title={cliente.observacao || ""}>
                         {resumirTexto(cliente.observacao, 35)}
@@ -552,7 +765,12 @@ function Clientes() {
 
             <div className="clientes-mobile-list">
               {clientesFiltrados.map((cliente) => (
-                <article key={cliente.id} className="cliente-card">
+                <article
+                  key={cliente.id}
+                  className={`cliente-card ${
+                    cliente.ativo ? "" : "cliente-card--inativo"
+                  }`}
+                >
                   <div className="cliente-card__header">
                     <div>
                       <h4>{cliente.nome}</h4>
@@ -587,17 +805,23 @@ function Clientes() {
                   <div className="cliente-card__grid">
                     <div>
                       <span>Analista</span>
-                      <strong>{cliente.analista || "-"}</strong>
+                      <strong>
+                        {cliente.analistaNome || cliente.analista || "-"}
+                      </strong>
                     </div>
 
                     <div>
                       <span>Assistente</span>
-                      <strong>{cliente.assistente || "-"}</strong>
+                      <strong>
+                        {cliente.assistenteNome || cliente.assistente || "-"}
+                      </strong>
                     </div>
 
                     <div>
                       <span>Operador</span>
-                      <strong>{cliente.operador || "-"}</strong>
+                      <strong>
+                        {cliente.operadorNome || cliente.operador || "-"}
+                      </strong>
                     </div>
 
                     <div>
@@ -634,7 +858,17 @@ function Clientes() {
 
                     <div>
                       <span>Status</span>
-                      <strong>{cliente.ativo ? "Ativo" : "Inativo"}</strong>
+                      <strong>
+                        <span
+                          className={`clientes-status ${
+                            cliente.ativo
+                              ? "clientes-status--ativo"
+                              : "clientes-status--inativo"
+                          }`}
+                        >
+                          {cliente.ativo ? "Ativo" : "Inativo"}
+                        </span>
+                      </strong>
                     </div>
 
                     <div>
@@ -737,39 +971,66 @@ function Clientes() {
                 </div>
 
                 <div className="field">
-                  <label htmlFor="operador">Operador</label>
-                  <input
-                    id="operador"
-                    name="operador"
-                    type="text"
-                    value={form.operador}
-                    onChange={handleChange}
-                    placeholder="Digite o operador"
-                  />
+                  <label htmlFor="operadorId">Operador</label>
+                  <select
+                    id="operadorId"
+                    name="operadorId"
+                    value={form.operadorId}
+                    onChange={handleUsuarioVinculadoChange(
+                      "operadorId",
+                      "operadorNome",
+                      operadoresDisponiveis,
+                    )}
+                  >
+                    <option value="">Selecione um responsável</option>
+                    {operadoresDisponiveis.map((usuarioItem) => (
+                      <option key={usuarioItem.id} value={usuarioItem.id}>
+                        {obterLabelUsuarioVinculo(usuarioItem)}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="field">
-                  <label htmlFor="assistente">Assistente</label>
-                  <input
-                    id="assistente"
-                    name="assistente"
-                    type="text"
-                    value={form.assistente}
-                    onChange={handleChange}
-                    placeholder="Digite o assistente"
-                  />
+                  <label htmlFor="assistenteId">Assistente</label>
+                  <select
+                    id="assistenteId"
+                    name="assistenteId"
+                    value={form.assistenteId}
+                    onChange={handleUsuarioVinculadoChange(
+                      "assistenteId",
+                      "assistenteNome",
+                      assistentesDisponiveis,
+                    )}
+                  >
+                    <option value="">Selecione um responsável</option>
+                    {assistentesDisponiveis.map((usuarioItem) => (
+                      <option key={usuarioItem.id} value={usuarioItem.id}>
+                        {obterLabelUsuarioVinculo(usuarioItem)}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="field">
-                  <label htmlFor="analista">Analista</label>
-                  <input
-                    id="analista"
-                    name="analista"
-                    type="text"
-                    value={form.analista}
-                    onChange={handleChange}
-                    placeholder="Digite o analista"
-                  />
+                  <label htmlFor="analistaId">Analista</label>
+                  <select
+                    id="analistaId"
+                    name="analistaId"
+                    value={form.analistaId}
+                    onChange={handleUsuarioVinculadoChange(
+                      "analistaId",
+                      "analistaNome",
+                      analistasCadastroDisponiveis,
+                    )}
+                  >
+                    <option value="">Selecione um responsável</option>
+                    {analistasCadastroDisponiveis.map((usuarioItem) => (
+                      <option key={usuarioItem.id} value={usuarioItem.id}>
+                        {obterLabelUsuarioVinculo(usuarioItem)}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="field">
@@ -788,6 +1049,18 @@ function Clientes() {
                     <option value="true">Ativo</option>
                     <option value="false">Inativo</option>
                   </select>
+                </div>
+
+                <div className="field field--full">
+                  <label htmlFor="linkNossoSistema">Link nosso sistema</label>
+                  <input
+                    id="linkNossoSistema"
+                    name="linkNossoSistema"
+                    type="url"
+                    value={form.linkNossoSistema}
+                    onChange={handleChange}
+                    placeholder="https://..."
+                  />
                 </div>
 
                 <div className="field field--full">

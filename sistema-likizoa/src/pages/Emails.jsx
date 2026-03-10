@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import "./emails.css";
 
+import { useAuth } from "../contexts/AuthContext";
+import { ehAdminOuGestor } from "../utils/permissoes";
+
 import { buscarClientes } from "../services/firebase/clientes";
 import {
   atualizarEmailsCliente,
   buscarEmailsClientes,
   criarEmailsCliente,
+  excluirEmailsCliente,
 } from "../services/firebase/emailsClientes";
 
 const FORM_INICIAL = {
@@ -16,12 +20,14 @@ const FORM_INICIAL = {
 };
 
 function extrairEmails(valor) {
-  return [...new Set(
-    String(valor || "")
-      .split(/[\n,;]+/)
-      .map((email) => email.trim())
-      .filter(Boolean)
-  )];
+  return [
+    ...new Set(
+      String(valor || "")
+        .split(/[\n,;]+/)
+        .map((email) => email.trim())
+        .filter(Boolean),
+    ),
+  ];
 }
 
 function emailsParaTexto(emails) {
@@ -37,6 +43,9 @@ function validarEmail(email) {
 }
 
 function Emails() {
+  const { user, userData, loading } = useAuth();
+  const podeGerenciarEmails = ehAdminOuGestor(userData);
+
   const [registros, setRegistros] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [carregando, setCarregando] = useState(true);
@@ -51,19 +60,28 @@ function Emails() {
   const [salvando, setSalvando] = useState(false);
 
   const [copiadoId, setCopiadoId] = useState("");
+  const [excluindoId, setExcluindoId] = useState("");
 
   async function carregarDados() {
     try {
       setCarregando(true);
       setErroLista("");
 
-      const [dadosEmails, dadosClientes] = await Promise.all([
-        buscarEmailsClientes(),
-        buscarClientes(),
-      ]);
+      const dadosClientes = await buscarClientes({
+        role: userData?.roles,
+        uid: user?.uid,
+        isAdminOuGestor: podeGerenciarEmails,
+      });
 
-      setRegistros(dadosEmails);
+      const clienteIds = dadosClientes.map((cliente) => cliente.id);
+
+      const dadosEmails = await buscarEmailsClientes({
+        isAdminOuGestor: podeGerenciarEmails,
+        clienteIds,
+      });
+
       setClientes(dadosClientes);
+      setRegistros(dadosEmails);
     } catch (error) {
       console.error("ERRO ao carregar e-mails:", error);
       setErroLista("Não foi possível carregar os e-mails dos clientes.");
@@ -73,14 +91,16 @@ function Emails() {
   }
 
   useEffect(() => {
-    carregarDados();
-  }, []);
+    if (!loading) {
+      carregarDados();
+    }
+  }, [loading, user?.uid, userData?.roles, podeGerenciarEmails]);
 
   const clientesDisponiveis = useMemo(() => {
     return [...clientes].sort((a, b) =>
       String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR", {
         sensitivity: "base",
-      })
+      }),
     );
   }, [clientes]);
 
@@ -98,7 +118,7 @@ function Emails() {
 
       const emailMatch = Array.isArray(registro.emails)
         ? registro.emails.some((email) =>
-            String(email).toLowerCase().includes(textoBusca)
+            String(email).toLowerCase().includes(textoBusca),
           )
         : false;
 
@@ -107,6 +127,11 @@ function Emails() {
   }, [registros, busca]);
 
   function abrirNovoRegistro() {
+    if (!podeGerenciarEmails) {
+      alert("Você não tem permissão para cadastrar registros de e-mails.");
+      return;
+    }
+
     setRegistroEditandoId(null);
     setForm(FORM_INICIAL);
     setErroFormulario("");
@@ -114,6 +139,11 @@ function Emails() {
   }
 
   function abrirEdicao(registro) {
+    if (!podeGerenciarEmails) {
+      alert("Você não tem permissão para editar registros de e-mails.");
+      return;
+    }
+
     setRegistroEditandoId(registro.id);
     setForm({
       clienteId: registro.clienteId || "",
@@ -137,7 +167,7 @@ function Emails() {
   function handleClienteChange(event) {
     const clienteId = event.target.value;
     const clienteSelecionado = clientesDisponiveis.find(
-      (cliente) => cliente.id === clienteId
+      (cliente) => cliente.id === clienteId,
     );
 
     setForm((estadoAtual) => ({
@@ -179,6 +209,11 @@ function Emails() {
   async function handleSubmit(event) {
     event.preventDefault();
 
+    if (!podeGerenciarEmails) {
+      setErroFormulario("Você não tem permissão para salvar registros.");
+      return;
+    }
+
     const mensagemErro = validarFormulario();
 
     if (mensagemErro) {
@@ -213,6 +248,30 @@ function Emails() {
     }
   }
 
+  async function handleExcluir(registro) {
+    if (!podeGerenciarEmails) {
+      alert("Você não tem permissão para excluir registros.");
+      return;
+    }
+
+    const confirmou = window.confirm(
+      `Deseja realmente excluir o registro de e-mails de "${registro.clienteNome}"?`,
+    );
+
+    if (!confirmou) return;
+
+    try {
+      setExcluindoId(registro.id);
+      await excluirEmailsCliente(registro.id, user?.uid || null);
+      await carregarDados();
+    } catch (error) {
+      console.error("ERRO ao excluir registro de e-mails:", error);
+      alert("Não foi possível excluir o registro.");
+    } finally {
+      setExcluindoId("");
+    }
+  }
+
   async function copiarEmails(registro) {
     try {
       const texto = Array.isArray(registro.emails)
@@ -230,11 +289,23 @@ function Emails() {
     }
   }
 
+  if (loading) {
+    return (
+      <section className="page">
+        <div className="card">
+          <div className="emails-feedback">
+            <p>Carregando permissões...</p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="page">
       <div className="page-header">
         <div>
-          <p className="page-header__eyebrow">Módulo 02</p>
+          
           <h1>E-mails</h1>
           <p className="page-header__description">
             Aqui você guarda os e-mails de cada cliente para consultar e copiar
@@ -242,9 +313,15 @@ function Emails() {
           </p>
         </div>
 
-        <button className="primary-button" type="button" onClick={abrirNovoRegistro}>
-          + Novo registro
-        </button>
+        {podeGerenciarEmails ? (
+          <button
+            className="primary-button"
+            type="button"
+            onClick={abrirNovoRegistro}
+          >
+            + Novo registro
+          </button>
+        ) : null}
       </div>
 
       <div className="card">
@@ -313,11 +390,16 @@ function Emails() {
                         </div>
                       </td>
 
-                      <td>{Array.isArray(registro.emails) ? registro.emails.length : 0}</td>
+                      <td>
+                        {Array.isArray(registro.emails)
+                          ? registro.emails.length
+                          : 0}
+                      </td>
 
                       <td>
                         <div className="email-tags">
-                          {Array.isArray(registro.emails) && registro.emails.length > 0 ? (
+                          {Array.isArray(registro.emails) &&
+                          registro.emails.length > 0 ? (
                             registro.emails.map((email) => (
                               <span key={email} className="email-chip">
                                 {email}
@@ -341,13 +423,29 @@ function Emails() {
                             {copiadoId === registro.id ? "Copiado!" : "Copiar"}
                           </button>
 
-                          <button
-                            className="ghost-button"
-                            type="button"
-                            onClick={() => abrirEdicao(registro)}
-                          >
-                            Editar
-                          </button>
+                          {podeGerenciarEmails ? (
+                            <>
+                              <button
+                                className="ghost-button"
+                                type="button"
+                                onClick={() => abrirEdicao(registro)}
+                                disabled={excluindoId === registro.id}
+                              >
+                                Editar
+                              </button>
+
+                              <button
+                                className="ghost-button"
+                                type="button"
+                                onClick={() => handleExcluir(registro)}
+                                disabled={excluindoId === registro.id}
+                              >
+                                {excluindoId === registro.id
+                                  ? "Excluindo..."
+                                  : "Excluir"}
+                              </button>
+                            </>
+                          ) : null}
                         </div>
                       </td>
                     </tr>
@@ -378,18 +476,35 @@ function Emails() {
                         {copiadoId === registro.id ? "Copiado!" : "Copiar"}
                       </button>
 
-                      <button
-                        className="ghost-button"
-                        type="button"
-                        onClick={() => abrirEdicao(registro)}
-                      >
-                        Editar
-                      </button>
+                      {podeGerenciarEmails ? (
+                        <>
+                          <button
+                            className="ghost-button"
+                            type="button"
+                            onClick={() => abrirEdicao(registro)}
+                            disabled={excluindoId === registro.id}
+                          >
+                            Editar
+                          </button>
+
+                          <button
+                            className="ghost-button"
+                            type="button"
+                            onClick={() => handleExcluir(registro)}
+                            disabled={excluindoId === registro.id}
+                          >
+                            {excluindoId === registro.id
+                              ? "Excluindo..."
+                              : "Excluir"}
+                          </button>
+                        </>
+                      ) : null}
                     </div>
                   </div>
 
                   <div className="email-card__body">
-                    {Array.isArray(registro.emails) && registro.emails.length > 0 ? (
+                    {Array.isArray(registro.emails) &&
+                    registro.emails.length > 0 ? (
                       registro.emails.map((email) => (
                         <span key={email} className="email-chip">
                           {email}
@@ -408,14 +523,19 @@ function Emails() {
 
       {modalAberto ? (
         <div className="modal-backdrop" onClick={() => fecharModal()}>
-          <div className="modal modal--medium" onClick={(event) => event.stopPropagation()}>
+          <div
+            className="modal modal--medium"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="modal__header">
               <div className="modal__title-group">
                 <p className="page-header__eyebrow">
                   {registroEditandoId ? "Editar registro" : "Novo registro"}
                 </p>
                 <h3>
-                  {registroEditandoId ? "Atualizar e-mails" : "Cadastrar e-mails"}
+                  {registroEditandoId
+                    ? "Atualizar e-mails"
+                    : "Cadastrar e-mails"}
                 </h3>
               </div>
 
@@ -448,9 +568,7 @@ function Emails() {
                 </div>
 
                 <div className="field field--full">
-                  <label htmlFor="emailsTexto">
-                    E-mails do cliente
-                  </label>
+                  <label htmlFor="emailsTexto">E-mails do cliente</label>
                   <textarea
                     id="emailsTexto"
                     name="emailsTexto"
@@ -496,7 +614,11 @@ function Emails() {
                   Cancelar
                 </button>
 
-                <button className="primary-button" type="submit" disabled={salvando}>
+                <button
+                  className="primary-button"
+                  type="submit"
+                  disabled={salvando}
+                >
                   {salvando
                     ? "Salvando..."
                     : registroEditandoId

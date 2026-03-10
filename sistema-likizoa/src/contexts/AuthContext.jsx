@@ -1,10 +1,45 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
+import {
+  EmailAuthProvider,
+  onAuthStateChanged,
+  reauthenticateWithCredential,
+  signInWithEmailAndPassword,
+  signOut,
+  updatePassword,
+} from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 
 import { auth, db } from "../services/firebase/config";
 
 const AuthContext = createContext(null);
+
+const ROLE_MODULES = {
+  admin: [
+    "dashboard",
+    "clientes",
+    "emails",
+    "rastreadores",
+    "usuarios",
+    "links",
+  ],
+  gestor: [
+    "dashboard",
+    "clientes",
+    "emails",
+    "rastreadores",
+    "usuarios",
+    "links",
+  ],
+  operador: ["dashboard", "clientes", "links"],
+  analista: ["dashboard", "clientes", "emails", "rastreadores", "links"],
+  assistente: ["dashboard", "clientes", "rastreadores", "links"],
+};
+
+function normalizarRole(role) {
+  return String(role || "")
+    .trim()
+    .toLowerCase();
+}
 
 function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -58,6 +93,20 @@ function AuthProvider({ children }) {
     await signOut(auth);
   }
 
+  async function changePasswordUser(currentPassword, newPassword) {
+    if (!auth.currentUser || !auth.currentUser.email) {
+      throw new Error("Usuário não autenticado.");
+    }
+
+    const credential = EmailAuthProvider.credential(
+      auth.currentUser.email,
+      currentPassword,
+    );
+
+    await reauthenticateWithCredential(auth.currentUser, credential);
+    await updatePassword(auth.currentUser, newPassword);
+  }
+
   function hasPermission(moduleKey) {
     if (!user || !userData?.ativo) {
       return false;
@@ -67,7 +116,10 @@ function AuthProvider({ children }) {
       return true;
     }
 
-    return Boolean(userData?.permissoes?.[moduleKey]);
+    const role = normalizarRole(userData?.roles);
+    const allowedModules = ROLE_MODULES[role] || [];
+
+    return allowedModules.includes(moduleKey);
   }
 
   const value = useMemo(
@@ -77,9 +129,10 @@ function AuthProvider({ children }) {
       loading,
       signInUser,
       signOutUser,
+      changePasswordUser,
       hasPermission,
     }),
-    [user, userData, loading]
+    [user, userData, loading],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

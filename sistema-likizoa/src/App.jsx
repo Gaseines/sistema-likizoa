@@ -6,6 +6,8 @@ import Clientes from "./pages/Clientes";
 import Emails from "./pages/Emails";
 import Rastreadores from "./pages/Rastreadores";
 import Login from "./pages/Login";
+import Usuarios from "./pages/Usuarios";
+import Links from "./pages/Links";
 
 import ProtectedRoute from "./routes/ProtectedRoute";
 import ModuleRoute from "./routes/ModuleRoute";
@@ -52,6 +54,8 @@ function App() {
               </ModuleRoute>
             }
           />
+          <Route path="/links" element={<Links />} />
+          <Route path="/usuarios" element={<Usuarios />} />
         </Route>
       </Route>
 
