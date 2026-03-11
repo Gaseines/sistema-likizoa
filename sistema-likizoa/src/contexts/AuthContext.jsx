@@ -31,7 +31,7 @@ const ROLE_MODULES = {
     "usuarios",
     "links",
   ],
-  operador: ["dashboard", "clientes", "links"],
+  operador: ["dashboard", "clientes", "links", "rastreadores"],
   analista: ["dashboard", "clientes", "emails", "rastreadores", "links"],
   assistente: ["dashboard", "clientes", "rastreadores", "links"],
 };

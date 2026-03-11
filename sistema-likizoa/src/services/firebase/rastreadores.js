@@ -71,10 +71,13 @@ function ordenarRegistros(registros) {
       return comparacaoCliente;
     }
 
-    return String(a.rastreador || a.nome || "")
-      .localeCompare(String(b.rastreador || b.nome || ""), "pt-BR", {
+    return String(a.rastreador || a.nome || "").localeCompare(
+      String(b.rastreador || b.nome || ""),
+      "pt-BR",
+      {
         sensitivity: "base",
-      });
+      },
+    );
   });
 }
 
@@ -85,7 +88,9 @@ export async function buscarRastreadores({
   let registros = [];
 
   if (isAdminOuGestor) {
-    const snapshot = await getDocs(rastreadoresCollection);
+    const snapshot = await getDocs(
+      query(rastreadoresCollection, where("excluido", "==", false)),
+    );
 
     registros = snapshot.docs.map((documento) => ({
       id: documento.id,
@@ -93,9 +98,7 @@ export async function buscarRastreadores({
     }));
   } else {
     const idsValidos = [
-      ...new Set(
-        [CLIENTE_NOSSO_ACESSO_ID, ...clienteIds.filter(Boolean)],
-      ),
+      ...new Set([CLIENTE_NOSSO_ACESSO_ID, ...clienteIds.filter(Boolean)]),
     ];
 
     if (idsValidos.length === 0) {
@@ -104,7 +107,13 @@ export async function buscarRastreadores({
 
     const consultas = await Promise.all(
       idsValidos.map((clienteId) =>
-        getDocs(query(rastreadoresCollection, where("clienteId", "==", clienteId))),
+        getDocs(
+          query(
+            rastreadoresCollection,
+            where("clienteId", "==", clienteId),
+            where("excluido", "==", false),
+          ),
+        ),
       ),
     );
 
@@ -118,7 +127,6 @@ export async function buscarRastreadores({
 
   const registrosUnicos = registros.filter(
     (registro, index, array) =>
-      registro.excluido !== true &&
       array.findIndex((item) => item.id === registro.id) === index,
   );
 

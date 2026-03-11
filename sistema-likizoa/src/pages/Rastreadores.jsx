@@ -28,11 +28,17 @@ function validarEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim());
 }
 
+function normalizarTexto(valor) {
+  return String(valor || "")
+    .trim()
+    .toLowerCase();
+}
+
 function ehNossoAcesso(registro) {
   return (
     String(registro?.clienteId || "").trim() === CLIENTE_NOSSO_ACESSO_ID ||
-    String(registro?.clienteNome || "").trim().toLowerCase() ===
-      CLIENTE_NOSSO_ACESSO_NOME.toLowerCase()
+    normalizarTexto(registro?.clienteNome) ===
+      normalizarTexto(CLIENTE_NOSSO_ACESSO_NOME)
   );
 }
 
@@ -94,7 +100,8 @@ function normalizarRastreadorParaFormulario(registro) {
     clienteNome: ehNossoAcesso(registro)
       ? CLIENTE_NOSSO_ACESSO_NOME
       : registro.clienteNome || "",
-    rastreador: registro.rastreador || registro.nome || registro.plataforma || "",
+    rastreador:
+      registro.rastreador || registro.nome || registro.plataforma || "",
     email: registro.email || "",
     login: registro.login || "",
     senha: registro.senha || "",
@@ -123,6 +130,8 @@ function Rastreadores() {
 
   const [senhasVisiveis, setSenhasVisiveis] = useState({});
 
+  const roleUsuario = normalizarTexto(userData?.roles || userData?.role);
+  const usuarioEhOperador = roleUsuario === "operador";
   const podeGerenciarRastreadores = ehAdminOuGestor(userData);
 
   async function carregarDados() {
@@ -142,18 +151,41 @@ function Rastreadores() {
           nome: CLIENTE_NOSSO_ACESSO_NOME,
         },
         ...dadosClientes.filter(
-          (cliente) => String(cliente.id || "").trim() !== CLIENTE_NOSSO_ACESSO_ID,
+          (cliente) =>
+            String(cliente.id || "").trim() !== CLIENTE_NOSSO_ACESSO_ID,
         ),
       ]);
 
-      setClientes(clientesComNossoAcesso);
+      const clienteIdsParaBusca = usuarioEhOperador
+        ? [CLIENTE_NOSSO_ACESSO_ID]
+        : [
+            ...new Set([
+              CLIENTE_NOSSO_ACESSO_ID,
+              ...dadosClientes
+                .map((cliente) => String(cliente.id || "").trim())
+                .filter(Boolean),
+            ]),
+          ];
+
+      setClientes(
+        usuarioEhOperador
+          ? [
+              {
+                id: CLIENTE_NOSSO_ACESSO_ID,
+                nome: CLIENTE_NOSSO_ACESSO_NOME,
+              },
+            ]
+          : clientesComNossoAcesso,
+      );
 
       const dadosRastreadores = await buscarRastreadores({
         isAdminOuGestor: podeGerenciarRastreadores,
-        clienteIds: dadosClientes.map((cliente) => cliente.id),
+        clienteIds: clienteIdsParaBusca,
       });
 
-      setRastreadores(ordenarRastreadoresComNossoAcessoPrimeiro(dadosRastreadores));
+      setRastreadores(
+        ordenarRastreadoresComNossoAcessoPrimeiro(dadosRastreadores),
+      );
     } catch (error) {
       console.error("ERRO ao buscar rastreadores:", error);
       setErroLista("Não foi possível carregar os rastreadores.");
@@ -166,7 +198,7 @@ function Rastreadores() {
     if (!loading) {
       carregarDados();
     }
-  }, [loading, podeGerenciarRastreadores]);
+  }, [loading, podeGerenciarRastreadores, usuarioEhOperador]);
 
   const clientesDisponiveisFiltro = useMemo(() => {
     return ordenarClientesComNossoAcessoPrimeiro(clientes);
@@ -175,8 +207,12 @@ function Rastreadores() {
   const rastreadoresFiltrados = useMemo(() => {
     const textoBusca = busca.trim().toLowerCase();
 
+    const rastreadoresBase = usuarioEhOperador
+      ? rastreadores.filter((registro) => ehNossoAcesso(registro))
+      : rastreadores;
+
     return ordenarRastreadoresComNossoAcessoPrimeiro(
-      rastreadores.filter((registro) => {
+      rastreadoresBase.filter((registro) => {
         const clienteMatch = String(registro.clienteNome || "")
           .toLowerCase()
           .includes(textoBusca);
@@ -196,7 +232,11 @@ function Rastreadores() {
           .includes(textoBusca);
 
         const passouBusca =
-          !textoBusca || clienteMatch || rastreadorMatch || emailMatch || loginMatch;
+          !textoBusca ||
+          clienteMatch ||
+          rastreadorMatch ||
+          emailMatch ||
+          loginMatch;
 
         const passouCliente =
           filtroCliente === "Todos" || registro.clienteId === filtroCliente;
@@ -204,7 +244,7 @@ function Rastreadores() {
         return passouBusca && passouCliente;
       }),
     );
-  }, [rastreadores, busca, filtroCliente]);
+  }, [rastreadores, busca, filtroCliente, usuarioEhOperador]);
 
   function abrirNovoRastreador() {
     if (!podeGerenciarRastreadores) {
@@ -263,7 +303,9 @@ function Rastreadores() {
 
   function handleClienteChange(event) {
     const clienteId = event.target.value;
-    const clienteSelecionado = clientes.find((cliente) => cliente.id === clienteId);
+    const clienteSelecionado = clientes.find(
+      (cliente) => cliente.id === clienteId,
+    );
 
     const ehSelecionadoNossoAcesso =
       clienteId === CLIENTE_NOSSO_ACESSO_ID ||
@@ -359,7 +401,9 @@ function Rastreadores() {
     }
 
     const confirmou = window.confirm(
-      `Deseja realmente excluir o rastreador "${registro.rastreador || registro.nome || "-"}"?`,
+      `Deseja realmente excluir o rastreador "${
+        registro.rastreador || registro.nome || "-"
+      }"?`,
     );
 
     if (!confirmou) return;
@@ -401,7 +445,8 @@ function Rastreadores() {
         <div>
           <h1>Rastreadores</h1>
           <p className="page-header__description">
-            Aqui você cadastra, edita e organiza os acessos de rastreadores por cliente.
+            Aqui você cadastra, edita e organiza os acessos de rastreadores por
+            cliente.
           </p>
         </div>
 
@@ -483,7 +528,8 @@ function Rastreadores() {
           <div className="rastreadores-empty">
             <h4>Nenhum rastreador encontrado</h4>
             <p>
-              Cadastre um novo rastreador ou ajuste os filtros para visualizar os resultados.
+              Cadastre um novo rastreador ou ajuste os filtros para visualizar
+              os resultados.
             </p>
           </div>
         ) : (
@@ -524,7 +570,9 @@ function Rastreadores() {
                               onClick={() => handleExcluir(registro)}
                               disabled={excluindoId === registro.id}
                             >
-                              {excluindoId === registro.id ? "Excluindo..." : "Excluir"}
+                              {excluindoId === registro.id
+                                ? "Excluindo..."
+                                : "Excluir"}
                             </button>
                           </div>
                         </td>
@@ -536,7 +584,12 @@ function Rastreadores() {
                         </div>
                       </td>
 
-                      <td>{registro.rastreador || registro.nome || registro.plataforma || "-"}</td>
+                      <td>
+                        {registro.rastreador ||
+                          registro.nome ||
+                          registro.plataforma ||
+                          "-"}
+                      </td>
                       <td>{registro.email || "-"}</td>
                       <td>{registro.login || "-"}</td>
 
@@ -556,7 +609,9 @@ function Rastreadores() {
                               type="button"
                               onClick={() => toggleSenha(registro.id)}
                             >
-                              {senhasVisiveis[registro.id] ? "Ocultar" : "Mostrar"}
+                              {senhasVisiveis[registro.id]
+                                ? "Ocultar"
+                                : "Mostrar"}
                             </button>
                           ) : null}
                         </div>
@@ -593,7 +648,12 @@ function Rastreadores() {
                 <article key={registro.id} className="rastreador-card">
                   <div className="rastreador-card__header">
                     <div>
-                      <h4>{registro.rastreador || registro.nome || registro.plataforma || "-"}</h4>
+                      <h4>
+                        {registro.rastreador ||
+                          registro.nome ||
+                          registro.plataforma ||
+                          "-"}
+                      </h4>
                       <p>{registro.clienteNome || "-"}</p>
                     </div>
 
@@ -614,7 +674,9 @@ function Rastreadores() {
                           onClick={() => handleExcluir(registro)}
                           disabled={excluindoId === registro.id}
                         >
-                          {excluindoId === registro.id ? "Excluindo..." : "Excluir"}
+                          {excluindoId === registro.id
+                            ? "Excluindo..."
+                            : "Excluir"}
                         </button>
                       </div>
                     ) : null}
@@ -674,7 +736,9 @@ function Rastreadores() {
                             type="button"
                             onClick={() => toggleSenha(registro.id)}
                           >
-                            {senhasVisiveis[registro.id] ? "Ocultar" : "Mostrar"}
+                            {senhasVisiveis[registro.id]
+                              ? "Ocultar"
+                              : "Mostrar"}
                           </button>
                         </strong>
                       </div>
@@ -693,7 +757,9 @@ function Rastreadores() {
             <div className="modal__header">
               <div className="modal__title-group">
                 <p className="page-header__eyebrow">
-                  {rastreadorEditandoId ? "Editar rastreador" : "Novo rastreador"}
+                  {rastreadorEditandoId
+                    ? "Editar rastreador"
+                    : "Novo rastreador"}
                 </p>
                 <h3>
                   {rastreadorEditandoId
@@ -790,7 +856,10 @@ function Rastreadores() {
                   <label htmlFor="senha">
                     Senha
                     {String(form.login || "").trim() ? (
-                      <span className="field__required"> (obrigatória com login)</span>
+                      <span className="field__required">
+                        {" "}
+                        (obrigatória com login)
+                      </span>
                     ) : null}
                   </label>
                   <input
@@ -827,7 +896,9 @@ function Rastreadores() {
                 </div>
 
                 <div className="field field--full">
-                  <label htmlFor="linkAcesso">Link para acessar o rastreador</label>
+                  <label htmlFor="linkAcesso">
+                    Link para acessar o rastreador
+                  </label>
                   <input
                     id="linkAcesso"
                     name="linkAcesso"

@@ -20,6 +20,8 @@ const CLIENTE_INICIAL = {
   temDiarias: false,
   operadorId: "",
   operadorNome: "",
+  operador2Id: "",
+  operador2Nome: "",
   assistenteId: "",
   assistenteNome: "",
   analistaId: "",
@@ -132,6 +134,15 @@ function montarUsuariosDisponiveis(
     .sort(ordenarUsuariosParaVinculo);
 }
 
+function obterNomesOperadoresCliente(cliente) {
+  return [
+    cliente.operadorNome || cliente.operador || "",
+    cliente.operador2Nome || cliente.operador2 || "",
+  ]
+    .map((nome) => String(nome || "").trim())
+    .filter(Boolean);
+}
+
 function normalizarClienteParaFormulario(cliente) {
   return {
     nome: cliente.nome || "",
@@ -141,6 +152,8 @@ function normalizarClienteParaFormulario(cliente) {
     temDiarias: Boolean(cliente.temDiarias),
     operadorId: cliente.operadorId || "",
     operadorNome: cliente.operadorNome || cliente.operador || "",
+    operador2Id: cliente.operador2Id || "",
+    operador2Nome: cliente.operador2Nome || cliente.operador2 || "",
     assistenteId: cliente.assistenteId || "",
     assistenteNome: cliente.assistenteNome || cliente.assistente || "",
     analistaId: cliente.analistaId || "",
@@ -165,8 +178,12 @@ function clientePertenceAoUsuario(cliente, user, userData) {
   if (role === "operador") {
     return (
       cliente.operadorId === uid ||
+      cliente.operador2Id === uid ||
       (!cliente.operadorId &&
         normalizarTexto(cliente.operadorNome || cliente.operador) ===
+          nomeUsuario) ||
+      (!cliente.operador2Id &&
+        normalizarTexto(cliente.operador2Nome || cliente.operador2) ===
           nomeUsuario)
     );
   }
@@ -223,6 +240,7 @@ function Clientes() {
   const [filtroAnalista, setFiltroAnalista] = useState("Todos");
   const [filtroCorte, setFiltroCorte] = useState("Todos");
   const [filtroOperador, setFiltroOperador] = useState("Todos");
+  const [filtroEnvioSemanal, setFiltroEnvioSemanal] = useState("Todos");
   const [busca, setBusca] = useState("");
 
   const [modalAberto, setModalAberto] = useState(false);
@@ -297,9 +315,7 @@ function Clientes() {
   const operadoresFiltroDisponiveis = useMemo(() => {
     return [
       ...new Set(
-        clientesVisiveis
-          .map((cliente) => cliente.operadorNome || cliente.operador)
-          .filter(Boolean),
+        clientesVisiveis.flatMap((cliente) => obterNomesOperadoresCliente(cliente)),
       ),
     ].sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }));
   }, [clientesVisiveis]);
@@ -307,6 +323,10 @@ function Clientes() {
   const operadoresDisponiveis = useMemo(() => {
     return montarUsuariosDisponiveis(usuarios, "operador", form.operadorId);
   }, [usuarios, form.operadorId]);
+
+  const operadores2Disponiveis = useMemo(() => {
+    return montarUsuariosDisponiveis(usuarios, "operador", form.operador2Id);
+  }, [usuarios, form.operador2Id]);
 
   const analistasCadastroDisponiveis = useMemo(() => {
     return montarUsuariosDisponiveis(usuarios, "analista", form.analistaId);
@@ -340,12 +360,24 @@ function Clientes() {
           filtroCorte === "Todos" ||
           Number(cliente.dataCorteDia) === Number(filtroCorte);
 
-        const nomeOperador = cliente.operadorNome || cliente.operador || "";
+        const nomesOperadores = obterNomesOperadoresCliente(cliente);
 
         const passouOperador =
-          filtroOperador === "Todos" || nomeOperador === filtroOperador;
+          filtroOperador === "Todos" || nomesOperadores.includes(filtroOperador);
 
-        return passouBusca && passouAnalista && passouCorte && passouOperador;
+        const passouEnvioSemanal =
+          filtroEnvioSemanal === "Todos" ||
+          (filtroEnvioSemanal === "Sim"
+            ? Boolean(cliente.envioSemanal)
+            : !Boolean(cliente.envioSemanal));
+
+        return (
+          passouBusca &&
+          passouAnalista &&
+          passouCorte &&
+          passouOperador &&
+          passouEnvioSemanal
+        );
       })
       .sort(ordenarClientesPorDataCorte);
   }, [
@@ -354,6 +386,7 @@ function Clientes() {
     filtroAnalista,
     filtroCorte,
     filtroOperador,
+    filtroEnvioSemanal,
   ]);
 
   function abrirNovoCliente() {
@@ -393,6 +426,7 @@ function Clientes() {
     setFiltroAnalista("Todos");
     setFiltroCorte("Todos");
     setFiltroOperador("Todos");
+    setFiltroEnvioSemanal("Todos");
     setBusca("");
   }
 
@@ -447,6 +481,14 @@ function Clientes() {
 
     if (!form.analistaId) {
       return "Selecione o analista do cliente.";
+    }
+
+    if (
+      form.operadorId &&
+      form.operador2Id &&
+      form.operadorId === form.operador2Id
+    ) {
+      return "Selecione operadores diferentes para Operador 1 e Operador 2.";
     }
 
     if (
@@ -620,6 +662,19 @@ function Clientes() {
           </div>
 
           <div className="field">
+            <label htmlFor="filtro-envio-semanal">Envio semanal</label>
+            <select
+              id="filtro-envio-semanal"
+              value={filtroEnvioSemanal}
+              onChange={(event) => setFiltroEnvioSemanal(event.target.value)}
+            >
+              <option value="Todos">Todos</option>
+              <option value="Sim">Sim</option>
+              <option value="Não">Não</option>
+            </select>
+          </div>
+
+          <div className="field">
             <label htmlFor="filtro-busca">Busca</label>
             <input
               id="filtro-busca"
@@ -668,6 +723,7 @@ function Clientes() {
                     <th>Analista</th>
                     <th>Assistente</th>
                     <th>Operador</th>
+                    
                     <th>Processamento</th>
                     <th>Folga fora</th>
                     <th>Tem diárias</th>
@@ -726,6 +782,7 @@ function Clientes() {
                         {cliente.assistenteNome || cliente.assistente || "-"}
                       </td>
                       <td>{cliente.operadorNome || cliente.operador || "-"}</td>
+                      
 
                       <td>
                         <span className="clientes-badge">
@@ -821,6 +878,13 @@ function Clientes() {
                       <span>Operador</span>
                       <strong>
                         {cliente.operadorNome || cliente.operador || "-"}
+                      </strong>
+                    </div>
+
+                    <div>
+                      <span>Operador 2</span>
+                      <strong>
+                        {cliente.operador2Nome || cliente.operador2 || "-"}
                       </strong>
                     </div>
 
@@ -984,6 +1048,27 @@ function Clientes() {
                   >
                     <option value="">Selecione um responsável</option>
                     {operadoresDisponiveis.map((usuarioItem) => (
+                      <option key={usuarioItem.id} value={usuarioItem.id}>
+                        {obterLabelUsuarioVinculo(usuarioItem)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="field">
+                  <label htmlFor="operador2Id">Operador 2</label>
+                  <select
+                    id="operador2Id"
+                    name="operador2Id"
+                    value={form.operador2Id}
+                    onChange={handleUsuarioVinculadoChange(
+                      "operador2Id",
+                      "operador2Nome",
+                      operadores2Disponiveis,
+                    )}
+                  >
+                    <option value="">Selecione um responsável</option>
+                    {operadores2Disponiveis.map((usuarioItem) => (
                       <option key={usuarioItem.id} value={usuarioItem.id}>
                         {obterLabelUsuarioVinculo(usuarioItem)}
                       </option>

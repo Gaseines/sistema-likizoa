@@ -23,6 +23,7 @@ function normalizarTexto(valor) {
 
 function prepararPayload(cliente) {
   const operadorNome = String(cliente.operadorNome || "").trim();
+  const operador2Nome = String(cliente.operador2Nome || "").trim();
   const assistenteNome = String(cliente.assistenteNome || "").trim();
   const analistaNome = String(cliente.analistaNome || "").trim();
 
@@ -36,6 +37,10 @@ function prepararPayload(cliente) {
     operadorId: String(cliente.operadorId || "").trim(),
     operadorNome,
     operador: operadorNome,
+
+    operador2Id: String(cliente.operador2Id || "").trim(),
+    operador2Nome,
+    operador2: operador2Nome,
 
     assistenteId: String(cliente.assistenteId || "").trim(),
     assistenteNome,
@@ -56,13 +61,38 @@ function prepararPayload(cliente) {
 }
 
 export async function buscarClientes({ role, uid, isAdminOuGestor } = {}) {
-  let consulta = clientesCollection;
   const roleNormalizada = normalizarTexto(role);
 
+  if (!isAdminOuGestor && uid && roleNormalizada === "operador") {
+    const [snapshotOperador1, snapshotOperador2] = await Promise.all([
+      getDocs(query(clientesCollection, where("operadorId", "==", uid))),
+      getDocs(query(clientesCollection, where("operador2Id", "==", uid))),
+    ]);
+
+    const clientesMap = new Map();
+
+    [...snapshotOperador1.docs, ...snapshotOperador2.docs].forEach((documento) => {
+      const cliente = {
+        id: documento.id,
+        ...documento.data(),
+      };
+
+      if (cliente.excluido !== true) {
+        clientesMap.set(cliente.id, cliente);
+      }
+    });
+
+    return Array.from(clientesMap.values()).sort((a, b) =>
+      String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR", {
+        sensitivity: "base",
+      }),
+    );
+  }
+
+  let consulta = clientesCollection;
+
   if (!isAdminOuGestor && uid) {
-    if (roleNormalizada === "operador") {
-      consulta = query(clientesCollection, where("operadorId", "==", uid));
-    } else if (roleNormalizada === "analista") {
+    if (roleNormalizada === "analista") {
       consulta = query(clientesCollection, where("analistaId", "==", uid));
     } else if (roleNormalizada === "assistente") {
       consulta = query(clientesCollection, where("assistenteId", "==", uid));
