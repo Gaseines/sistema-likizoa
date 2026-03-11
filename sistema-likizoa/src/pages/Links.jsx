@@ -86,8 +86,38 @@ function linkValido(valor) {
   }
 }
 
+function abrirLinkComPost(url, campos = {}) {
+  if (!linkValido(url)) return;
+
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = url;
+  form.target = "_blank";
+  form.style.display = "none";
+
+  Object.entries(campos).forEach(([nome, valor]) => {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = nome;
+    input.value = String(valor ?? "");
+    form.appendChild(input);
+  });
+
+  document.body.appendChild(form);
+
+  if (typeof form.requestSubmit === "function") {
+    form.requestSubmit();
+  } else {
+    form.submit();
+  }
+
+  document.body.removeChild(form);
+}
+
 function abrirLink(url) {
-  window.open(url, "_blank", "noopener,noreferrer");
+  abrirLinkComPost(url, {
+    acesso_externo: "1",
+  });
 }
 
 function clienteExistePorAlias(clientes, aliases = []) {
@@ -235,7 +265,6 @@ function Links() {
     <section className="page">
       <div className="page-header">
         <div>
-          
           <h1>Links</h1>
           <p className="page-header__description">
             Aqui você acessa rapidamente os links úteis do sistema e dos clientes.

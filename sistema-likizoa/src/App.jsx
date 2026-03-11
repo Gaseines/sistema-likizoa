@@ -5,9 +5,9 @@ import Dashboard from "./pages/Dashboard";
 import Clientes from "./pages/Clientes";
 import Emails from "./pages/Emails";
 import Rastreadores from "./pages/Rastreadores";
-import Login from "./pages/Login";
 import Usuarios from "./pages/Usuarios";
 import Links from "./pages/Links";
+import Acesso from "./pages/Acesso";
 
 import ProtectedRoute from "./routes/ProtectedRoute";
 import ModuleRoute from "./routes/ModuleRoute";
@@ -15,7 +15,7 @@ import ModuleRoute from "./routes/ModuleRoute";
 function App() {
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
+      <Route path="/login" element={<Acesso />} />
 
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<MainLayout />}>
@@ -54,12 +54,28 @@ function App() {
               </ModuleRoute>
             }
           />
-          <Route path="/links" element={<Links />} />
-          <Route path="/usuarios" element={<Usuarios />} />
+
+          <Route
+            path="links"
+            element={
+              <ModuleRoute moduleKey="links">
+                <Links />
+              </ModuleRoute>
+            }
+          />
+
+          <Route
+            path="usuarios"
+            element={
+              <ModuleRoute moduleKey="usuarios">
+                <Usuarios />
+              </ModuleRoute>
+            }
+          />
         </Route>
       </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
 }
