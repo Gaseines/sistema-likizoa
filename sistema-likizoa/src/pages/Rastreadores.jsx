@@ -6,6 +6,8 @@ import {
   buscarRastreadores,
   criarRastreador,
   excluirRastreador,
+  CLIENTE_NOSSO_ACESSO_ID,
+  CLIENTE_NOSSO_ACESSO_NOME,
 } from "../services/firebase/rastreadores";
 import { buscarClientes } from "../services/firebase/clientes";
 import { ehAdminOuGestor } from "../utils/permissoes";
@@ -26,10 +28,72 @@ function validarEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim());
 }
 
+function ehNossoAcesso(registro) {
+  return (
+    String(registro?.clienteId || "").trim() === CLIENTE_NOSSO_ACESSO_ID ||
+    String(registro?.clienteNome || "").trim().toLowerCase() ===
+      CLIENTE_NOSSO_ACESSO_NOME.toLowerCase()
+  );
+}
+
+function ordenarClientesComNossoAcessoPrimeiro(lista) {
+  return [...lista].sort((a, b) => {
+    const aNossoAcesso = ehNossoAcesso(a);
+    const bNossoAcesso = ehNossoAcesso(b);
+
+    if (aNossoAcesso !== bNossoAcesso) {
+      return aNossoAcesso ? -1 : 1;
+    }
+
+    return String(a.nome || a.clienteNome || "").localeCompare(
+      String(b.nome || b.clienteNome || ""),
+      "pt-BR",
+      {
+        sensitivity: "base",
+      },
+    );
+  });
+}
+
+function ordenarRastreadoresComNossoAcessoPrimeiro(lista) {
+  return [...lista].sort((a, b) => {
+    const aNossoAcesso = ehNossoAcesso(a);
+    const bNossoAcesso = ehNossoAcesso(b);
+
+    if (aNossoAcesso !== bNossoAcesso) {
+      return aNossoAcesso ? -1 : 1;
+    }
+
+    const comparacaoCliente = String(a.clienteNome || "").localeCompare(
+      String(b.clienteNome || ""),
+      "pt-BR",
+      {
+        sensitivity: "base",
+      },
+    );
+
+    if (comparacaoCliente !== 0) {
+      return comparacaoCliente;
+    }
+
+    return String(a.rastreador || a.nome || a.plataforma || "").localeCompare(
+      String(b.rastreador || b.nome || b.plataforma || ""),
+      "pt-BR",
+      {
+        sensitivity: "base",
+      },
+    );
+  });
+}
+
 function normalizarRastreadorParaFormulario(registro) {
   return {
-    clienteId: registro.clienteId || "",
-    clienteNome: registro.clienteNome || "",
+    clienteId: ehNossoAcesso(registro)
+      ? CLIENTE_NOSSO_ACESSO_ID
+      : registro.clienteId || "",
+    clienteNome: ehNossoAcesso(registro)
+      ? CLIENTE_NOSSO_ACESSO_NOME
+      : registro.clienteNome || "",
     rastreador: registro.rastreador || registro.nome || registro.plataforma || "",
     email: registro.email || "",
     login: registro.login || "",
@@ -61,10 +125,6 @@ function Rastreadores() {
 
   const podeGerenciarRastreadores = ehAdminOuGestor(userData);
 
-  const emailPreenchido = String(form.email || "").trim().length > 0;
-  const loginPreenchido = String(form.login || "").trim().length > 0;
-  const senhaHabilitada = loginPreenchido;
-
   async function carregarDados() {
     try {
       setCarregandoLista(true);
@@ -76,14 +136,24 @@ function Rastreadores() {
         isAdminOuGestor: podeGerenciarRastreadores,
       });
 
-      setClientes(dadosClientes);
+      const clientesComNossoAcesso = ordenarClientesComNossoAcessoPrimeiro([
+        {
+          id: CLIENTE_NOSSO_ACESSO_ID,
+          nome: CLIENTE_NOSSO_ACESSO_NOME,
+        },
+        ...dadosClientes.filter(
+          (cliente) => String(cliente.id || "").trim() !== CLIENTE_NOSSO_ACESSO_ID,
+        ),
+      ]);
+
+      setClientes(clientesComNossoAcesso);
 
       const dadosRastreadores = await buscarRastreadores({
         isAdminOuGestor: podeGerenciarRastreadores,
         clienteIds: dadosClientes.map((cliente) => cliente.id),
       });
 
-      setRastreadores(dadosRastreadores);
+      setRastreadores(ordenarRastreadoresComNossoAcessoPrimeiro(dadosRastreadores));
     } catch (error) {
       console.error("ERRO ao buscar rastreadores:", error);
       setErroLista("Não foi possível carregar os rastreadores.");
@@ -99,43 +169,41 @@ function Rastreadores() {
   }, [loading, podeGerenciarRastreadores]);
 
   const clientesDisponiveisFiltro = useMemo(() => {
-    return [...clientes].sort((a, b) =>
-      String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR", {
-        sensitivity: "base",
-      }),
-    );
+    return ordenarClientesComNossoAcessoPrimeiro(clientes);
   }, [clientes]);
 
   const rastreadoresFiltrados = useMemo(() => {
     const textoBusca = busca.trim().toLowerCase();
 
-    return rastreadores.filter((registro) => {
-      const clienteMatch = String(registro.clienteNome || "")
-        .toLowerCase()
-        .includes(textoBusca);
+    return ordenarRastreadoresComNossoAcessoPrimeiro(
+      rastreadores.filter((registro) => {
+        const clienteMatch = String(registro.clienteNome || "")
+          .toLowerCase()
+          .includes(textoBusca);
 
-      const rastreadorMatch = String(
-        registro.rastreador || registro.nome || registro.plataforma || "",
-      )
-        .toLowerCase()
-        .includes(textoBusca);
+        const rastreadorMatch = String(
+          registro.rastreador || registro.nome || registro.plataforma || "",
+        )
+          .toLowerCase()
+          .includes(textoBusca);
 
-      const emailMatch = String(registro.email || "")
-        .toLowerCase()
-        .includes(textoBusca);
+        const emailMatch = String(registro.email || "")
+          .toLowerCase()
+          .includes(textoBusca);
 
-      const loginMatch = String(registro.login || "")
-        .toLowerCase()
-        .includes(textoBusca);
+        const loginMatch = String(registro.login || "")
+          .toLowerCase()
+          .includes(textoBusca);
 
-      const passouBusca =
-        !textoBusca || clienteMatch || rastreadorMatch || emailMatch || loginMatch;
+        const passouBusca =
+          !textoBusca || clienteMatch || rastreadorMatch || emailMatch || loginMatch;
 
-      const passouCliente =
-        filtroCliente === "Todos" || registro.clienteId === filtroCliente;
+        const passouCliente =
+          filtroCliente === "Todos" || registro.clienteId === filtroCliente;
 
-      return passouBusca && passouCliente;
-    });
+        return passouBusca && passouCliente;
+      }),
+    );
   }, [rastreadores, busca, filtroCliente]);
 
   function abrirNovoRastreador() {
@@ -197,10 +265,16 @@ function Rastreadores() {
     const clienteId = event.target.value;
     const clienteSelecionado = clientes.find((cliente) => cliente.id === clienteId);
 
+    const ehSelecionadoNossoAcesso =
+      clienteId === CLIENTE_NOSSO_ACESSO_ID ||
+      clienteSelecionado?.nome === CLIENTE_NOSSO_ACESSO_NOME;
+
     setForm((estadoAtual) => ({
       ...estadoAtual,
-      clienteId,
-      clienteNome: clienteSelecionado?.nome || "",
+      clienteId: ehSelecionadoNossoAcesso ? CLIENTE_NOSSO_ACESSO_ID : clienteId,
+      clienteNome: ehSelecionadoNossoAcesso
+        ? CLIENTE_NOSSO_ACESSO_NOME
+        : clienteSelecionado?.nome || "",
     }));
   }
 
@@ -325,7 +399,6 @@ function Rastreadores() {
     <section className="page">
       <div className="page-header">
         <div>
-          
           <h1>Rastreadores</h1>
           <p className="page-header__description">
             Aqui você cadastra, edita e organiza os acessos de rastreadores por cliente.
@@ -672,7 +745,7 @@ function Rastreadores() {
                 <div className="field">
                   <label htmlFor="email">
                     E-mail
-                    {!loginPreenchido ? (
+                    {!String(form.login || "").trim() ? (
                       <span className="field__required"> (ou login)</span>
                     ) : null}
                   </label>
@@ -685,7 +758,7 @@ function Rastreadores() {
                     placeholder="Opcional se houver login"
                   />
                   <small className="field__hint">
-                    {loginPreenchido
+                    {String(form.login || "").trim()
                       ? "Como o login foi preenchido, o e-mail é opcional."
                       : "Preencha este campo ou o login."}
                   </small>
@@ -694,7 +767,7 @@ function Rastreadores() {
                 <div className="field">
                   <label htmlFor="login">
                     Login
-                    {!emailPreenchido ? (
+                    {!String(form.email || "").trim() ? (
                       <span className="field__required"> (ou e-mail)</span>
                     ) : null}
                   </label>
@@ -707,7 +780,7 @@ function Rastreadores() {
                     placeholder="Opcional se houver e-mail"
                   />
                   <small className="field__hint">
-                    {emailPreenchido
+                    {String(form.email || "").trim()
                       ? "Como o e-mail foi preenchido, o login é opcional."
                       : "Preencha este campo ou o e-mail."}
                   </small>
@@ -716,7 +789,7 @@ function Rastreadores() {
                 <div className="field">
                   <label htmlFor="senha">
                     Senha
-                    {loginPreenchido ? (
+                    {String(form.login || "").trim() ? (
                       <span className="field__required"> (obrigatória com login)</span>
                     ) : null}
                   </label>
@@ -727,14 +800,14 @@ function Rastreadores() {
                     value={form.senha}
                     onChange={handleChange}
                     placeholder={
-                      loginPreenchido
+                      String(form.login || "").trim()
                         ? "Digite a senha"
                         : "Preencha primeiro o login"
                     }
-                    disabled={!senhaHabilitada}
+                    disabled={!String(form.login || "").trim()}
                   />
                   <small className="field__hint">
-                    {loginPreenchido
+                    {String(form.login || "").trim()
                       ? "Como o login foi informado, a senha é obrigatória."
                       : "A senha só é necessária quando houver login."}
                   </small>

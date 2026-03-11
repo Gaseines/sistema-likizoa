@@ -112,10 +112,22 @@ function formatarRole(role) {
   return mapa[roleNormalizada] || "Usuário";
 }
 
+function validarFormatoEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim());
+}
+
 function MainLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+
+  const [emailForm, setEmailForm] = useState({
+    currentPassword: "",
+    newEmail: "",
+  });
+  const [emailError, setEmailError] = useState("");
+  const [emailSuccess, setEmailSuccess] = useState("");
+  const [savingEmail, setSavingEmail] = useState(false);
 
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: "",
@@ -133,6 +145,7 @@ function MainLayout() {
     hasPermission,
     signOutUser,
     changePasswordUser,
+    changeEmailUser,
   } = useAuth();
 
   const visibleMenuItems = useMemo(() => {
@@ -154,21 +167,38 @@ function MainLayout() {
   function abrirPerfil() {
     setProfileMenuOpen(false);
     setProfileModalOpen(true);
+    setEmailError("");
+    setEmailSuccess("");
     setPasswordError("");
     setPasswordSuccess("");
   }
 
   function fecharPerfil() {
-    if (savingPassword) return;
+    if (savingPassword || savingEmail) return;
 
     setProfileModalOpen(false);
+    setEmailForm({
+      currentPassword: "",
+      newEmail: "",
+    });
     setPasswordForm({
       currentPassword: "",
       newPassword: "",
       confirmPassword: "",
     });
+    setEmailError("");
+    setEmailSuccess("");
     setPasswordError("");
     setPasswordSuccess("");
+  }
+
+  function handleEmailChange(event) {
+    const { name, value } = event.target;
+
+    setEmailForm((estadoAtual) => ({
+      ...estadoAtual,
+      [name]: value,
+    }));
   }
 
   function handlePasswordChange(event) {
@@ -188,6 +218,30 @@ function MainLayout() {
     } catch (error) {
       console.error("ERRO ao sair:", error);
     }
+  }
+
+  function validarEmail() {
+    const { currentPassword, newEmail } = emailForm;
+    const emailAtual = String(user?.email || "").trim().toLowerCase();
+    const emailNovo = String(newEmail || "").trim().toLowerCase();
+
+    if (!String(currentPassword || "").trim()) {
+      return "Preencha sua senha atual.";
+    }
+
+    if (!emailNovo) {
+      return "Preencha o novo e-mail.";
+    }
+
+    if (!validarFormatoEmail(emailNovo)) {
+      return "Informe um e-mail válido.";
+    }
+
+    if (emailNovo === emailAtual) {
+      return "O novo e-mail precisa ser diferente do atual.";
+    }
+
+    return "";
   }
 
   function validarSenha() {
@@ -218,6 +272,61 @@ function MainLayout() {
     }
 
     return "";
+  }
+
+  async function handleSubmitEmail(event) {
+    event.preventDefault();
+
+    const mensagemErro = validarEmail();
+
+    if (mensagemErro) {
+      setEmailError(mensagemErro);
+      setEmailSuccess("");
+      return;
+    }
+
+    try {
+      setSavingEmail(true);
+      setEmailError("");
+      setEmailSuccess("");
+
+      await changeEmailUser(emailForm.currentPassword, emailForm.newEmail.trim());
+
+      setEmailSuccess(
+        "Enviamos um link de confirmação para o novo e-mail. A troca só será concluída após a verificação.",
+      );
+      setEmailForm({
+        currentPassword: "",
+        newEmail: "",
+      });
+    } catch (error) {
+      console.error("ERRO ao alterar e-mail:", error);
+
+      let mensagem = "Não foi possível alterar o e-mail.";
+
+      if (
+        error?.code === "auth/wrong-password" ||
+        error?.code === "auth/invalid-credential"
+      ) {
+        mensagem = "A senha atual informada está incorreta.";
+      } else if (error?.code === "auth/invalid-email") {
+        mensagem = "O novo e-mail informado é inválido.";
+      } else if (error?.code === "auth/email-already-in-use") {
+        mensagem = "Este e-mail já está sendo usado por outra conta.";
+      } else if (error?.code === "auth/requires-recent-login") {
+        mensagem = "Faça login novamente e tente alterar o e-mail.";
+      } else if (error?.code === "auth/too-many-requests") {
+        mensagem =
+          "Muitas tentativas detectadas. Aguarde um pouco e tente novamente.";
+      } else if (error?.code === "auth/network-request-failed") {
+        mensagem = "Erro de conexão. Verifique sua internet e tente novamente.";
+      }
+
+      setEmailError(mensagem);
+      setEmailSuccess("");
+    } finally {
+      setSavingEmail(false);
+    }
   }
 
   async function handleSubmitPassword(event) {
@@ -252,10 +361,15 @@ function MainLayout() {
 
       let mensagem = "Não foi possível alterar a senha.";
 
-      if (error?.code === "auth/wrong-password" || error?.code === "auth/invalid-credential") {
+      if (
+        error?.code === "auth/wrong-password" ||
+        error?.code === "auth/invalid-credential"
+      ) {
         mensagem = "A senha atual informada está incorreta.";
       } else if (error?.code === "auth/weak-password") {
         mensagem = "A nova senha é muito fraca.";
+      } else if (error?.code === "auth/requires-recent-login") {
+        mensagem = "Faça login novamente e tente alterar a senha.";
       } else if (error?.code === "auth/too-many-requests") {
         mensagem =
           "Muitas tentativas detectadas. Aguarde um pouco e tente novamente.";
@@ -432,7 +546,7 @@ function MainLayout() {
                 className="ghost-button"
                 type="button"
                 onClick={fecharPerfil}
-                disabled={savingPassword}
+                disabled={savingPassword || savingEmail}
               >
                 Fechar
               </button>
@@ -445,7 +559,7 @@ function MainLayout() {
               </div>
 
               <div className="profile-info-card">
-                <span>E-mail</span>
+                <span>E-mail atual</span>
                 <strong>{user?.email || "-"}</strong>
               </div>
 
@@ -453,6 +567,76 @@ function MainLayout() {
                 <span>Perfil</span>
                 <strong>{formatarRole(userData?.roles)}</strong>
               </div>
+            </div>
+
+            <div className="profile-modal__divider" />
+
+            <div className="profile-modal__password-block">
+              <div className="profile-modal__section-title">
+                <h4>Alterar e-mail</h4>
+                <p>
+                  Você receberá um link de confirmação no novo e-mail antes da troca ser concluída.
+                </p>
+              </div>
+
+              <form className="profile-password-form" onSubmit={handleSubmitEmail}>
+                <div className="form-grid">
+                  <div className="field">
+                    <label htmlFor="newEmail">Novo e-mail</label>
+                    <input
+                      id="newEmail"
+                      name="newEmail"
+                      type="email"
+                      value={emailForm.newEmail}
+                      onChange={handleEmailChange}
+                      placeholder="Digite o novo e-mail"
+                    />
+                  </div>
+
+                  <div className="field">
+                    <label htmlFor="emailCurrentPassword">Senha atual</label>
+                    <input
+                      id="emailCurrentPassword"
+                      name="currentPassword"
+                      type="password"
+                      value={emailForm.currentPassword}
+                      onChange={handleEmailChange}
+                      placeholder="Digite sua senha atual"
+                    />
+                  </div>
+                </div>
+
+                {emailError ? (
+                  <div className="profile-feedback profile-feedback--erro">
+                    <p>{emailError}</p>
+                  </div>
+                ) : null}
+
+                {emailSuccess ? (
+                  <div className="profile-feedback profile-feedback--sucesso">
+                    <p>{emailSuccess}</p>
+                  </div>
+                ) : null}
+
+                <div className="profile-modal__actions">
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={fecharPerfil}
+                    disabled={savingEmail}
+                  >
+                    Cancelar
+                  </button>
+
+                  <button
+                    className="primary-button"
+                    type="submit"
+                    disabled={savingEmail}
+                  >
+                    {savingEmail ? "Enviando..." : "Alterar e-mail"}
+                  </button>
+                </div>
+              </form>
             </div>
 
             <div className="profile-modal__divider" />

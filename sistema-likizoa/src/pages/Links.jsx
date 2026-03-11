@@ -14,28 +14,28 @@ const ABAS = [
 const LINKS_TEMPO_REAL = [
   {
     id: "rtm-interticio",
-    grupo: "RTM",
+    grupo: "RTM Transportes EIRELI",
     titulo: "Intertício",
     url: "http://likizoa-rtm.jornadatrabalho2.com.br/src/controller/CalculadoraJornadaController.php?mod=grid_status_atual_view2",
     aliasesClientes: ["rtm"],
   },
   {
     id: "rtm-jornada",
-    grupo: "RTM",
+    grupo: "RTM Transportes EIRELI",
     titulo: "Jornada",
     url: "https://likizoa-rtm.jornadatrabalho.com.br/src/controller/CalculadoraJornadaController.php?mod=grid_status_atual_view",
     aliasesClientes: ["rtm"],
   },
   {
     id: "pedrao-interticio",
-    grupo: "Pedrão",
+    grupo: "Pedrão Transportes de Carga LTDA",
     titulo: "Intertício",
     url: "http://likizoa-pedrotc.jornadatrabalho2.com.br/src/controller/CalculadoraJornadaController.php?mod=grid_status_atual_view2",
     aliasesClientes: ["pedrao", "pedrão", "pedrotc"],
   },
   {
     id: "pedrao-jornada",
-    grupo: "Pedrão",
+    grupo: "Pedrão Transportes de Carga LTDA",
     titulo: "Jornada",
     url: "https://likizoa-pedrotc.jornadatrabalho.com.br/src/controller/CalculadoraJornadaController.php?mod=grid_status_atual_view",
     aliasesClientes: ["pedrao", "pedrão", "pedrotc"],

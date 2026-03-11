@@ -6,6 +6,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
   updatePassword,
+  verifyBeforeUpdateEmail,
 } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 
@@ -107,6 +108,20 @@ function AuthProvider({ children }) {
     await updatePassword(auth.currentUser, newPassword);
   }
 
+  async function changeEmailUser(currentPassword, newEmail) {
+    if (!auth.currentUser || !auth.currentUser.email) {
+      throw new Error("Usuário não autenticado.");
+    }
+
+    const credential = EmailAuthProvider.credential(
+      auth.currentUser.email,
+      currentPassword,
+    );
+
+    await reauthenticateWithCredential(auth.currentUser, credential);
+    await verifyBeforeUpdateEmail(auth.currentUser, newEmail);
+  }
+
   function hasPermission(moduleKey) {
     if (!user || !userData?.ativo) {
       return false;
@@ -130,6 +145,7 @@ function AuthProvider({ children }) {
       signInUser,
       signOutUser,
       changePasswordUser,
+      changeEmailUser,
       hasPermission,
     }),
     [user, userData, loading],

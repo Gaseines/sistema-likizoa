@@ -13,14 +13,34 @@ import { db } from "./config";
 
 const rastreadoresCollection = collection(db, "rastreadores");
 
+export const CLIENTE_NOSSO_ACESSO_ID = "__nosso_acesso__";
+export const CLIENTE_NOSSO_ACESSO_NOME = "Nosso acesso";
+
 function normalizarTexto(valor) {
   return String(valor || "").trim();
 }
 
+function ehNossoAcesso(registro) {
+  return (
+    normalizarTexto(registro?.clienteId) === CLIENTE_NOSSO_ACESSO_ID ||
+    normalizarTexto(registro?.clienteNome).toLowerCase() ===
+      CLIENTE_NOSSO_ACESSO_NOME.toLowerCase()
+  );
+}
+
 function prepararPayload(registro) {
+  const clienteId = normalizarTexto(registro.clienteId);
+  const clienteNome = normalizarTexto(registro.clienteNome);
+
+  const ehRegistroNossoAcesso =
+    clienteId === CLIENTE_NOSSO_ACESSO_ID ||
+    clienteNome.toLowerCase() === CLIENTE_NOSSO_ACESSO_NOME.toLowerCase();
+
   return {
-    clienteId: normalizarTexto(registro.clienteId),
-    clienteNome: normalizarTexto(registro.clienteNome),
+    clienteId: ehRegistroNossoAcesso ? CLIENTE_NOSSO_ACESSO_ID : clienteId,
+    clienteNome: ehRegistroNossoAcesso
+      ? CLIENTE_NOSSO_ACESSO_NOME
+      : clienteNome,
     rastreador: normalizarTexto(registro.rastreador),
     email: normalizarTexto(registro.email),
     login: normalizarTexto(registro.login),
@@ -32,12 +52,20 @@ function prepararPayload(registro) {
 
 function ordenarRegistros(registros) {
   return registros.sort((a, b) => {
-    const clienteA = String(a.clienteNome || "");
-    const clienteB = String(b.clienteNome || "");
+    const aNossoAcesso = ehNossoAcesso(a);
+    const bNossoAcesso = ehNossoAcesso(b);
 
-    const comparacaoCliente = clienteA.localeCompare(clienteB, "pt-BR", {
-      sensitivity: "base",
-    });
+    if (aNossoAcesso !== bNossoAcesso) {
+      return aNossoAcesso ? -1 : 1;
+    }
+
+    const comparacaoCliente = String(a.clienteNome || "").localeCompare(
+      String(b.clienteNome || ""),
+      "pt-BR",
+      {
+        sensitivity: "base",
+      },
+    );
 
     if (comparacaoCliente !== 0) {
       return comparacaoCliente;
@@ -64,7 +92,11 @@ export async function buscarRastreadores({
       ...documento.data(),
     }));
   } else {
-    const idsValidos = [...new Set(clienteIds.filter(Boolean))];
+    const idsValidos = [
+      ...new Set(
+        [CLIENTE_NOSSO_ACESSO_ID, ...clienteIds.filter(Boolean)],
+      ),
+    ];
 
     if (idsValidos.length === 0) {
       return [];
