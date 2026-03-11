@@ -8,7 +8,7 @@ import {
   updatePassword,
   verifyBeforeUpdateEmail,
 } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 
 import { auth, db } from "../services/firebase/config";
 
@@ -42,6 +42,12 @@ function normalizarRole(role) {
     .toLowerCase();
 }
 
+function normalizarEmail(email) {
+  return String(email || "")
+    .trim()
+    .toLowerCase();
+}
+
 function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [userData, setUserData] = useState(null);
@@ -61,6 +67,31 @@ function AuthProvider({ children }) {
     };
   }
 
+  async function sincronizarEmailFirestore(firebaseUser, internalUserData) {
+    if (!firebaseUser?.uid || !internalUserData) {
+      return internalUserData;
+    }
+
+    const emailAuth = normalizarEmail(firebaseUser.email);
+    const emailFirestore = normalizarEmail(internalUserData.email);
+
+    if (!emailAuth || emailAuth === emailFirestore) {
+      return internalUserData;
+    }
+
+    const userRef = doc(db, "usuarios", firebaseUser.uid);
+
+    await updateDoc(userRef, {
+      email: emailAuth,
+      updatedAt: serverTimestamp(),
+    });
+
+    return {
+      ...internalUserData,
+      email: emailAuth,
+    };
+  }
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setLoading(true);
@@ -74,7 +105,12 @@ function AuthProvider({ children }) {
         }
 
         const internalUserData = await loadUserData(firebaseUser.uid);
-        setUserData(internalUserData);
+        const internalUserDataSincronizado = await sincronizarEmailFirestore(
+          firebaseUser,
+          internalUserData,
+        );
+
+        setUserData(internalUserDataSincronizado);
       } catch (error) {
         console.error("ERRO ao carregar usuário interno:", error);
         setUserData(null);
@@ -113,13 +149,15 @@ function AuthProvider({ children }) {
       throw new Error("Usuário não autenticado.");
     }
 
+    const novoEmailNormalizado = normalizarEmail(newEmail);
+
     const credential = EmailAuthProvider.credential(
       auth.currentUser.email,
       currentPassword,
     );
 
     await reauthenticateWithCredential(auth.currentUser, credential);
-    await verifyBeforeUpdateEmail(auth.currentUser, newEmail);
+    await verifyBeforeUpdateEmail(auth.currentUser, novoEmailNormalizado);
   }
 
   function hasPermission(moduleKey) {
