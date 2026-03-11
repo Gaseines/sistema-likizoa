@@ -24,7 +24,7 @@ function abrirLinkComPost(url, campos = {}) {
   const form = document.createElement("form");
   form.method = "POST";
   form.action = url;
-  form.target = "_blank";
+  
   form.style.display = "none";
 
   Object.entries(campos).forEach(([nome, valor]) => {
@@ -73,14 +73,23 @@ function Acesso() {
   }, [loading, user, navigate]);
 
   const tituloModo = useMemo(() => {
-    if (modo === "funcionario") return "Acesso do funcionário";
-    if (modo === "cliente") return "Acesso do cliente";
-    return "Acesso ao sistema";
+    if (modo === "funcionario") return "Acesso Do Funcionário";
+    if (modo === "cliente") return "Acesso Do Cliente";
+    return "Acesso Ao Sistema";
   }, [modo]);
 
   function voltarEscolha() {
     setModo("escolha");
+
+    setLoginForm({
+      email: "",
+      password: "",
+    });
     setLoginErro("");
+
+    setClienteForm({
+      cnpj: "",
+    });
     setClienteErro("");
     setClienteSucesso("");
   }
@@ -92,6 +101,8 @@ function Acesso() {
       ...estadoAtual,
       [name]: value,
     }));
+
+    setLoginErro("");
   }
 
   function handleClienteChange(event) {
@@ -100,6 +111,9 @@ function Acesso() {
     setClienteForm({
       cnpj: formatarCNPJ(value),
     });
+
+    setClienteErro("");
+    setClienteSucesso("");
   }
 
   async function handleSubmitLogin(event) {
@@ -176,8 +190,7 @@ function Acesso() {
       console.error("ERRO ao acessar como cliente:", error);
 
       const mensagem =
-        error?.message ||
-        error?.details ||
+        (typeof error?.message === "string" && error.message.trim()) ||
         "Não foi possível localizar o acesso desse cliente.";
 
       setClienteErro(mensagem);
@@ -192,7 +205,11 @@ function Acesso() {
       <div className="acesso-shell">
         <div className="acesso-brand">
           <div className="acesso-brand__logo-wrap">
-            <img src={logoLikizoa} alt="Likizoa" className="acesso-brand__logo" />
+            <img
+              src={logoLikizoa}
+              alt="Likizoa"
+              className="acesso-brand__logo"
+            />
           </div>
 
           <div>
@@ -215,8 +232,10 @@ function Acesso() {
               className="acesso-choice-card"
               onClick={() => setModo("funcionario")}
             >
-              <span className="acesso-choice-card__eyebrow">Área interna</span>
-              <strong className="acesso-choice-card__title">Sou funcionário</strong>
+              <span className="acesso-choice-card__eyebrow">Área Interna</span>
+              <strong className="acesso-choice-card__title">
+                Sou Funcionário
+              </strong>
               <p className="acesso-choice-card__text">
                 Acesse com e-mail e senha para entrar no sistema da Likizoa.
               </p>
@@ -227,8 +246,10 @@ function Acesso() {
               className="acesso-choice-card"
               onClick={() => setModo("cliente")}
             >
-              <span className="acesso-choice-card__eyebrow">Acesso externo</span>
-              <strong className="acesso-choice-card__title">Sou cliente</strong>
+              <span className="acesso-choice-card__eyebrow">
+                Acesso Externo
+              </span>
+              <strong className="acesso-choice-card__title">Sou Cliente</strong>
               <p className="acesso-choice-card__text">
                 Informe o CNPJ da sua empresa e acesse o sistema vinculado.
               </p>
@@ -238,7 +259,7 @@ function Acesso() {
           <div className="acesso-card">
             <div className="acesso-card__header">
               <div>
-                <h3>Login do funcionário</h3>
+                <h3>Login Do Funcionário</h3>
                 <p>Use suas credenciais para continuar.</p>
               </div>
 
@@ -287,7 +308,7 @@ function Acesso() {
                 className="primary-button acesso-form__submit"
                 disabled={loginCarregando}
               >
-                {loginCarregando ? "Entrando..." : "Entrar como funcionário"}
+                {loginCarregando ? "Entrando..." : "Entrar Como Funcionário"}
               </button>
             </form>
           </div>
@@ -295,7 +316,7 @@ function Acesso() {
           <div className="acesso-card">
             <div className="acesso-card__header">
               <div>
-                <h3>Acesso do cliente</h3>
+                <h3>Acesso Do Cliente</h3>
                 <p>Digite o CNPJ da empresa para continuar.</p>
               </div>
 
@@ -338,7 +359,7 @@ function Acesso() {
                 className="primary-button acesso-form__submit"
                 disabled={clienteCarregando}
               >
-                {clienteCarregando ? "Localizando..." : "Acessar meu sistema"}
+                {clienteCarregando ? "Localizando..." : "Acessar Meu Sistema"}
               </button>
             </form>
           </div>
