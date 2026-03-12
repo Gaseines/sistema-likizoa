@@ -123,14 +123,44 @@
   text-decoration: underline;
 }
 
-.rastreadores-password {
-  display: flex;
+.rastreadores-copy-field {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
+  max-width: 100%;
 }
 
-.rastreadores-password__value {
-  min-width: 72px;
+.rastreadores-copy-field span {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.rastreadores-copy-button {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text-soft);
+  border-radius: 10px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    color 0.2s ease,
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+.rastreadores-copy-button:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.rastreadores-copy-button:active {
+  transform: scale(0.98);
 }
 
 .rastreadores-mobile-list {

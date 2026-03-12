@@ -5,6 +5,7 @@ import Dashboard from "./pages/Dashboard";
 import Clientes from "./pages/Clientes";
 import Emails from "./pages/Emails";
 import Rastreadores from "./pages/Rastreadores";
+import Recados from "./pages/Recados";
 import Usuarios from "./pages/Usuarios";
 import Links from "./pages/Links";
 import Acesso from "./pages/Acesso";
@@ -60,6 +61,15 @@ function App() {
             element={
               <ModuleRoute moduleKey="links">
                 <Links />
+              </ModuleRoute>
+            }
+          />
+
+          <Route
+            path="recados"
+            element={
+              <ModuleRoute moduleKey="recados">
+                <Recados />
               </ModuleRoute>
             }
           />

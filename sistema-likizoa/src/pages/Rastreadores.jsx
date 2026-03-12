@@ -110,6 +110,36 @@ function normalizarRastreadorParaFormulario(registro) {
   };
 }
 
+async function copiarTextoParaAreaTransferencia(texto) {
+  const valor = String(texto || "").trim();
+
+  if (!valor) return false;
+
+  try {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(valor);
+      return true;
+    }
+  } catch {
+    // tenta fallback abaixo
+  }
+
+  try {
+    const textarea = document.createElement("textarea");
+    textarea.value = valor;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "absolute";
+    textarea.style.left = "-9999px";
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand("copy");
+    document.body.removeChild(textarea);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function Rastreadores() {
   const { user, userData, loading } = useAuth();
 
@@ -128,7 +158,7 @@ function Rastreadores() {
   const [salvando, setSalvando] = useState(false);
   const [excluindoId, setExcluindoId] = useState(null);
 
-  const [senhasVisiveis, setSenhasVisiveis] = useState({});
+  const [copiadoChave, setCopiadoChave] = useState("");
 
   const roleUsuario = normalizarTexto(userData?.roles || userData?.role);
   const usuarioEhOperador = roleUsuario === "operador";
@@ -327,6 +357,22 @@ function Rastreadores() {
     }));
   }
 
+  async function handleCopiar(valor, chave) {
+    const copiou = await copiarTextoParaAreaTransferencia(valor);
+
+    if (!copiou) {
+      alert("Não foi possível copiar a informação.");
+      return;
+    }
+
+    setCopiadoChave(chave);
+    window.setTimeout(() => {
+      setCopiadoChave((estadoAtual) =>
+        estadoAtual === chave ? "" : estadoAtual,
+      );
+    }, 1800);
+  }
+
   function validarFormulario() {
     const email = String(form.email || "").trim();
     const login = String(form.login || "").trim();
@@ -418,13 +464,6 @@ function Rastreadores() {
     } finally {
       setExcluindoId(null);
     }
-  }
-
-  function toggleSenha(id) {
-    setSenhasVisiveis((estadoAtual) => ({
-      ...estadoAtual,
-      [id]: !estadoAtual[id],
-    }));
   }
 
   if (loading) {
@@ -590,31 +629,80 @@ function Rastreadores() {
                           registro.plataforma ||
                           "-"}
                       </td>
-                      <td>{registro.email || "-"}</td>
-                      <td>{registro.login || "-"}</td>
 
                       <td>
-                        <div className="rastreadores-password">
-                          <span className="rastreadores-password__value">
-                            {senhasVisiveis[registro.id]
-                              ? registro.senha || "-"
-                              : registro.senha
-                                ? "••••••••"
-                                : "-"}
-                          </span>
-
-                          {registro.senha ? (
+                        {registro.email ? (
+                          <div className="rastreadores-copy-field">
+                            <span>{registro.email}</span>
                             <button
-                              className="ghost-button"
+                              className="rastreadores-copy-button"
                               type="button"
-                              onClick={() => toggleSenha(registro.id)}
+                              onClick={() =>
+                                handleCopiar(
+                                  registro.email,
+                                  `${registro.id}-email`,
+                                )
+                              }
+                              title="Copiar e-mail"
                             >
-                              {senhasVisiveis[registro.id]
-                                ? "Ocultar"
-                                : "Mostrar"}
+                              {copiadoChave === `${registro.id}-email`
+                                ? "Copiado!"
+                                : "Copiar"}
                             </button>
-                          ) : null}
-                        </div>
+                          </div>
+                        ) : (
+                          "-"
+                        )}
+                      </td>
+
+                      <td>
+                        {registro.login ? (
+                          <div className="rastreadores-copy-field">
+                            <span>{registro.login}</span>
+                            <button
+                              className="rastreadores-copy-button"
+                              type="button"
+                              onClick={() =>
+                                handleCopiar(
+                                  registro.login,
+                                  `${registro.id}-login`,
+                                )
+                              }
+                              title="Copiar login"
+                            >
+                              {copiadoChave === `${registro.id}-login`
+                                ? "Copiado!"
+                                : "Copiar"}
+                            </button>
+                          </div>
+                        ) : (
+                          "-"
+                        )}
+                      </td>
+
+                      <td>
+                        {registro.senha ? (
+                          <div className="rastreadores-copy-field">
+                            <span>{registro.senha}</span>
+                            <button
+                              className="rastreadores-copy-button"
+                              type="button"
+                              onClick={() =>
+                                handleCopiar(
+                                  registro.senha,
+                                  `${registro.id}-senha`,
+                                )
+                              }
+                              title="Copiar senha"
+                            >
+                              {copiadoChave === `${registro.id}-senha`
+                                ? "Copiado!"
+                                : "Copiar"}
+                            </button>
+                          </div>
+                        ) : (
+                          "-"
+                        )}
                       </td>
 
                       <td>
@@ -685,22 +773,85 @@ function Rastreadores() {
                   <div className="rastreador-card__grid">
                     <div>
                       <span>E-mail</span>
-                      <strong>{registro.email || "-"}</strong>
+                      <strong>
+                        {registro.email ? (
+                          <div className="rastreadores-copy-field">
+                            <span>{registro.email}</span>
+                            <button
+                              className="rastreadores-copy-button"
+                              type="button"
+                              onClick={() =>
+                                handleCopiar(
+                                  registro.email,
+                                  `${registro.id}-email`,
+                                )
+                              }
+                              title="Copiar e-mail"
+                            >
+                              {copiadoChave === `${registro.id}-email`
+                                ? "Copiado!"
+                                : "Copiar"}
+                            </button>
+                          </div>
+                        ) : (
+                          "-"
+                        )}
+                      </strong>
                     </div>
 
                     <div>
                       <span>Login</span>
-                      <strong>{registro.login || "-"}</strong>
+                      <strong>
+                        {registro.login ? (
+                          <div className="rastreadores-copy-field">
+                            <span>{registro.login}</span>
+                            <button
+                              className="rastreadores-copy-button"
+                              type="button"
+                              onClick={() =>
+                                handleCopiar(
+                                  registro.login,
+                                  `${registro.id}-login`,
+                                )
+                              }
+                              title="Copiar login"
+                            >
+                              {copiadoChave === `${registro.id}-login`
+                                ? "Copiado!"
+                                : "Copiar"}
+                            </button>
+                          </div>
+                        ) : (
+                          "-"
+                        )}
+                      </strong>
                     </div>
 
                     <div>
                       <span>Senha</span>
                       <strong>
-                        {senhasVisiveis[registro.id]
-                          ? registro.senha || "-"
-                          : registro.senha
-                            ? "••••••••"
-                            : "-"}
+                        {registro.senha ? (
+                          <div className="rastreadores-copy-field">
+                            <span>{registro.senha}</span>
+                            <button
+                              className="rastreadores-copy-button"
+                              type="button"
+                              onClick={() =>
+                                handleCopiar(
+                                  registro.senha,
+                                  `${registro.id}-senha`,
+                                )
+                              }
+                              title="Copiar senha"
+                            >
+                              {copiadoChave === `${registro.id}-senha`
+                                ? "Copiado!"
+                                : "Copiar"}
+                            </button>
+                          </div>
+                        ) : (
+                          "-"
+                        )}
                       </strong>
                     </div>
 
@@ -726,23 +877,6 @@ function Rastreadores() {
                         )}
                       </strong>
                     </div>
-
-                    {registro.senha ? (
-                      <div>
-                        <span>Visualização</span>
-                        <strong>
-                          <button
-                            className="ghost-button"
-                            type="button"
-                            onClick={() => toggleSenha(registro.id)}
-                          >
-                            {senhasVisiveis[registro.id]
-                              ? "Ocultar"
-                              : "Mostrar"}
-                          </button>
-                        </strong>
-                      </div>
-                    ) : null}
                   </div>
                 </article>
               ))}

@@ -260,3 +260,131 @@
 .cliente-card--inativo strong {
   color: #b42318;
 }
+
+.clientes-visualizando-como {
+  margin: 0.35rem 0 0;
+  color: #475467;
+}
+
+.clientes-table__row--clickable {
+  cursor: pointer;
+}
+
+.clientes-table__row--clickable:hover {
+  background: rgba(0, 158, 241, 0.04);
+}
+
+.cliente-card--clickable {
+  cursor: pointer;
+}
+
+.cliente-card--clickable:hover {
+  border-color: rgba(0, 158, 241, 0.22);
+}
+
+.clientes-toolbar--interno {
+  margin-bottom: 1rem;
+}
+
+.clientes-detalhes {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.clientes-detalhes__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.clientes-detalhes__grid span,
+.clientes-detalhes__bloco span {
+  display: block;
+  font-size: 0.78rem;
+  color: #667085;
+  margin-bottom: 0.2rem;
+}
+
+.clientes-detalhes__grid strong {
+  display: block;
+}
+
+.clientes-detalhes__blocos {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.clientes-detalhes__bloco {
+  padding: 1rem;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 18px;
+  background: #fff;
+}
+
+.clientes-detalhes__bloco p {
+  margin: 0;
+  color: #475467;
+  line-height: 1.55;
+}
+
+.clientes-detalhes__recados {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.clientes-recados-lista,
+.clientes-recados-admin__lista {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.clientes-recado-card,
+.clientes-recado-admin-card {
+  padding: 1rem;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 18px;
+  background: #fbfbf8;
+}
+
+.clientes-recado-card strong,
+.clientes-recado-admin-card strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: #101828;
+}
+
+.clientes-recado-card p,
+.clientes-recado-admin-card p {
+  margin: 0;
+  color: #475467;
+  line-height: 1.55;
+}
+
+.clientes-recado-admin-card--inativo {
+  opacity: 0.7;
+}
+
+.clientes-recado-admin-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.clientes-recado-form {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.clientes-empty--compacto {
+  padding: 0.5rem 0;
+}
+
+@media (max-width: 900px) {
+  .clientes-detalhes__grid {
+    grid-template-columns: 1fr;
+  }
+}

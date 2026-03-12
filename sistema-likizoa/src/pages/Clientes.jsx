@@ -7,6 +7,12 @@ import {
   excluirCliente,
 } from "../services/firebase/clientes";
 import { buscarUsuarios } from "../services/firebase/usuarios";
+import {
+  atualizarRecado,
+  buscarRecados,
+  criarRecado,
+  excluirRecado,
+} from "../services/firebase/recados";
 import { ehAdminOuGestor } from "../utils/permissoes";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -32,6 +38,16 @@ const CLIENTE_INICIAL = {
   clienteAcessaSistema: false,
   linkNossoSistema: "",
   regraEspecifica: "",
+  ativo: true,
+};
+
+const RECADO_CLIENTE_INICIAL = {
+  destinatarioUid: "",
+  destinatarioNome: "",
+  destinatarioRole: "",
+  referenciaVinculo: "",
+  titulo: "",
+  mensagem: "",
   ativo: true,
 };
 
@@ -80,8 +96,36 @@ function normalizarTexto(valor) {
     .toLowerCase();
 }
 
+function abrirLinkComPost(url, parametros = {}) {
+  if (!url) return;
+
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = url;
+  form.target = "_blank";
+  form.style.display = "none";
+
+  Object.entries(parametros).forEach(([chave, valor]) => {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = chave;
+    input.value = String(valor ?? "");
+    form.appendChild(input);
+  });
+
+  document.body.appendChild(form);
+  form.submit();
+  document.body.removeChild(form);
+}
+
 function obterRoleUsuario(usuario) {
   return normalizarTexto(usuario?.roles || usuario?.role);
+}
+
+function ehRoleVisualizavel(usuario) {
+  return ["operador", "analista", "assistente"].includes(
+    obterRoleUsuario(usuario),
+  );
 }
 
 function podeAssumirFuncaoNoCliente(usuario, funcao) {
@@ -141,6 +185,56 @@ function obterNomesOperadoresCliente(cliente) {
   ]
     .map((nome) => String(nome || "").trim())
     .filter(Boolean);
+}
+
+function obterVinculosRecadoCliente(cliente) {
+  return [
+    {
+      key: "operador",
+      label: "Operador",
+      uid: cliente.operadorId || "",
+      nome: cliente.operadorNome || cliente.operador || "",
+      role: "operador",
+    },
+    {
+      key: "operador2",
+      label: "Operador 2",
+      uid: cliente.operador2Id || "",
+      nome: cliente.operador2Nome || cliente.operador2 || "",
+      role: "operador",
+    },
+    {
+      key: "analista",
+      label: "Analista",
+      uid: cliente.analistaId || "",
+      nome: cliente.analistaNome || cliente.analista || "",
+      role: "analista",
+    },
+    {
+      key: "assistente",
+      label: "Assistente",
+      uid: cliente.assistenteId || "",
+      nome: cliente.assistenteNome || cliente.assistente || "",
+      role: "assistente",
+    },
+  ].filter((item) => item.uid && item.nome);
+}
+
+function obterLabelRecadoCliente(recado) {
+  const nome = String(recado.destinatarioNome || "").trim();
+  const referencia = String(recado.referenciaVinculo || "").trim().toLowerCase();
+
+  const mapa = {
+    operador: "Operador",
+    operador2: "Operador 2",
+    analista: "Analista",
+    assistente: "Assistente",
+  };
+
+  if (!nome) return "-";
+  if (!referencia || !mapa[referencia]) return nome;
+
+  return `${mapa[referencia]} • ${nome}`;
 }
 
 function normalizarClienteParaFormulario(cliente) {
@@ -241,6 +335,7 @@ function Clientes() {
   const [filtroCorte, setFiltroCorte] = useState("Todos");
   const [filtroOperador, setFiltroOperador] = useState("Todos");
   const [filtroEnvioSemanal, setFiltroEnvioSemanal] = useState("Todos");
+  const [filtroVisualizarComo, setFiltroVisualizarComo] = useState("Eu");
   const [busca, setBusca] = useState("");
 
   const [modalAberto, setModalAberto] = useState(false);
@@ -249,6 +344,19 @@ function Clientes() {
   const [erroFormulario, setErroFormulario] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [excluindoId, setExcluindoId] = useState(null);
+
+  const [clienteDetalhes, setClienteDetalhes] = useState(null);
+  const [modalDetalhesAberto, setModalDetalhesAberto] = useState(false);
+  const [recadosDetalhes, setRecadosDetalhes] = useState([]);
+  const [carregandoDetalhes, setCarregandoDetalhes] = useState(false);
+
+  const [recadosDoCliente, setRecadosDoCliente] = useState([]);
+  const [recadoForm, setRecadoForm] = useState(RECADO_CLIENTE_INICIAL);
+  const [recadoEditandoId, setRecadoEditandoId] = useState(null);
+  const [erroRecado, setErroRecado] = useState("");
+  const [salvandoRecado, setSalvandoRecado] = useState(false);
+  const [carregandoRecadosCliente, setCarregandoRecadosCliente] = useState(false);
+  const [excluindoRecadoId, setExcluindoRecadoId] = useState(null);
 
   const podeGerenciarClientes = ehAdminOuGestor(userData);
 
@@ -284,15 +392,67 @@ function Clientes() {
     }
   }, [loading, podeGerenciarClientes]);
 
+  const usuariosVisualizacaoDisponiveis = useMemo(() => {
+    return usuarios
+      .filter((usuarioItem) => ehRoleVisualizavel(usuarioItem))
+      .sort(ordenarUsuariosParaVinculo);
+  }, [usuarios]);
+
+  const usuarioVisualizado = useMemo(() => {
+    if (!podeGerenciarClientes || filtroVisualizarComo === "Eu") {
+      return null;
+    }
+
+    return (
+      usuariosVisualizacaoDisponiveis.find(
+        (usuarioItem) => usuarioItem.id === filtroVisualizarComo,
+      ) || null
+    );
+  }, [
+    podeGerenciarClientes,
+    filtroVisualizarComo,
+    usuariosVisualizacaoDisponiveis,
+  ]);
+
+  const modoVisualizacaoAtivo = Boolean(usuarioVisualizado);
+
+  const contextoVisualizacao = useMemo(() => {
+    if (modoVisualizacaoAtivo && usuarioVisualizado) {
+      return {
+        userContexto: { uid: usuarioVisualizado.id },
+        userDataContexto: {
+          nome: usuarioVisualizado.nome || "",
+          roles: usuarioVisualizado.roles || "",
+        },
+      };
+    }
+
+    return {
+      userContexto: user,
+      userDataContexto: userData,
+    };
+  }, [modoVisualizacaoAtivo, usuarioVisualizado, user, userData]);
+
+  const podeAbrirDetalhesCliente = !podeGerenciarClientes || modoVisualizacaoAtivo;
+
   const clientesVisiveis = useMemo(() => {
-    if (podeGerenciarClientes) {
+    if (podeGerenciarClientes && !modoVisualizacaoAtivo) {
       return clientes;
     }
 
     return clientes.filter((cliente) =>
-      clientePertenceAoUsuario(cliente, user, userData),
+      clientePertenceAoUsuario(
+        cliente,
+        contextoVisualizacao.userContexto,
+        contextoVisualizacao.userDataContexto,
+      ),
     );
-  }, [clientes, podeGerenciarClientes, user, userData]);
+  }, [
+    clientes,
+    podeGerenciarClientes,
+    modoVisualizacaoAtivo,
+    contextoVisualizacao,
+  ]);
 
   const analistasDisponiveis = useMemo(() => {
     return [
@@ -335,6 +495,10 @@ function Clientes() {
   const assistentesDisponiveis = useMemo(() => {
     return montarUsuariosDisponiveis(usuarios, "assistente", form.assistenteId);
   }, [usuarios, form.assistenteId]);
+
+  const destinatariosRecadoDisponiveis = useMemo(() => {
+    return obterVinculosRecadoCliente(form);
+  }, [form]);
 
   const clientesFiltrados = useMemo(() => {
     const textoBusca = busca.trim().toLowerCase();
@@ -389,6 +553,33 @@ function Clientes() {
     filtroEnvioSemanal,
   ]);
 
+  function limparFormularioRecado() {
+    setRecadoForm(RECADO_CLIENTE_INICIAL);
+    setRecadoEditandoId(null);
+    setErroRecado("");
+  }
+
+  async function carregarRecadosDoCliente(clienteId) {
+    if (!clienteId) {
+      setRecadosDoCliente([]);
+      return;
+    }
+
+    try {
+      setCarregandoRecadosCliente(true);
+      const dados = await buscarRecados({
+        tipo: "cliente",
+        clienteId,
+      });
+      setRecadosDoCliente(dados);
+    } catch (error) {
+      console.error("ERRO ao buscar recados do cliente:", error);
+      setRecadosDoCliente([]);
+    } finally {
+      setCarregandoRecadosCliente(false);
+    }
+  }
+
   function abrirNovoCliente() {
     if (!podeGerenciarClientes) {
       alert("Você não tem permissão para cadastrar clientes.");
@@ -398,10 +589,12 @@ function Clientes() {
     setClienteEditandoId(null);
     setForm(CLIENTE_INICIAL);
     setErroFormulario("");
+    setRecadosDoCliente([]);
+    limparFormularioRecado();
     setModalAberto(true);
   }
 
-  function abrirEdicao(cliente) {
+  async function abrirEdicao(cliente) {
     if (!podeGerenciarClientes) {
       alert("Você não tem permissão para editar clientes.");
       return;
@@ -410,7 +603,9 @@ function Clientes() {
     setClienteEditandoId(cliente.id);
     setForm(normalizarClienteParaFormulario(cliente));
     setErroFormulario("");
+    limparFormularioRecado();
     setModalAberto(true);
+    await carregarRecadosDoCliente(cliente.id);
   }
 
   function fecharModal(forcarFechamento = false) {
@@ -420,6 +615,15 @@ function Clientes() {
     setClienteEditandoId(null);
     setForm(CLIENTE_INICIAL);
     setErroFormulario("");
+    setRecadosDoCliente([]);
+    limparFormularioRecado();
+  }
+
+  function fecharModalDetalhes() {
+    setModalDetalhesAberto(false);
+    setClienteDetalhes(null);
+    setRecadosDetalhes([]);
+    setCarregandoDetalhes(false);
   }
 
   function limparFiltros() {
@@ -427,6 +631,7 @@ function Clientes() {
     setFiltroCorte("Todos");
     setFiltroOperador("Todos");
     setFiltroEnvioSemanal("Todos");
+    setFiltroVisualizarComo("Eu");
     setBusca("");
   }
 
@@ -455,6 +660,15 @@ function Clientes() {
     }));
   }
 
+  function handleRecadoChange(event) {
+    const { name, value } = event.target;
+
+    setRecadoForm((estadoAtual) => ({
+      ...estadoAtual,
+      [name]: value,
+    }));
+  }
+
   function handleUsuarioVinculadoChange(campoId, campoNome, listaUsuarios) {
     return (event) => {
       const usuarioId = event.target.value;
@@ -468,6 +682,21 @@ function Clientes() {
         [campoNome]: usuarioSelecionado?.nome || "",
       }));
     };
+  }
+
+  function handleDestinatarioRecadoChange(event) {
+    const usuarioId = event.target.value;
+    const itemSelecionado = destinatariosRecadoDisponiveis.find(
+      (item) => item.uid === usuarioId,
+    );
+
+    setRecadoForm((estadoAtual) => ({
+      ...estadoAtual,
+      destinatarioUid: usuarioId,
+      destinatarioNome: itemSelecionado?.nome || "",
+      destinatarioRole: itemSelecionado?.role || "",
+      referenciaVinculo: itemSelecionado?.key || "",
+    }));
   }
 
   function validarFormulario() {
@@ -497,6 +726,22 @@ function Clientes() {
       Number(form.dataCorteDia) > 31
     ) {
       return "Informe uma data de corte entre 1 e 31.";
+    }
+
+    return "";
+  }
+
+  function validarFormularioRecado() {
+    if (!clienteEditandoId) {
+      return "Salve o cliente primeiro para cadastrar recados.";
+    }
+
+    if (!recadoForm.destinatarioUid) {
+      return "Selecione para quem o recado será enviado.";
+    }
+
+    if (!String(recadoForm.mensagem || "").trim()) {
+      return "Digite a mensagem do recado.";
     }
 
     return "";
@@ -537,6 +782,56 @@ function Clientes() {
     }
   }
 
+  async function handleSubmitRecadoCliente(event) {
+    event.preventDefault();
+
+    if (!podeGerenciarClientes) {
+      setErroRecado("Você não tem permissão para salvar recados.");
+      return;
+    }
+
+    const mensagemErro = validarFormularioRecado();
+
+    if (mensagemErro) {
+      setErroRecado(mensagemErro);
+      return;
+    }
+
+    try {
+      setSalvandoRecado(true);
+      setErroRecado("");
+
+      const payload = {
+        tipo: "cliente",
+        clienteId: clienteEditandoId,
+        clienteNome: form.nome,
+        destinatarioUid: recadoForm.destinatarioUid,
+        destinatarioNome: recadoForm.destinatarioNome,
+        destinatarioRole: recadoForm.destinatarioRole,
+        referenciaVinculo: recadoForm.referenciaVinculo,
+        titulo: recadoForm.titulo,
+        mensagem: recadoForm.mensagem,
+        ativo: recadoForm.ativo,
+        createdByUid: user?.uid || "",
+        createdByNome: userData?.nome || "",
+      };
+
+      if (recadoEditandoId) {
+        await atualizarRecado(recadoEditandoId, payload);
+      } else {
+        await criarRecado(payload);
+      }
+
+      await carregarRecadosDoCliente(clienteEditandoId);
+      limparFormularioRecado();
+    } catch (error) {
+      console.error("ERRO ao salvar recado do cliente:", error);
+      setErroRecado("Não foi possível salvar o recado do cliente.");
+    } finally {
+      setSalvandoRecado(false);
+    }
+  }
+
   async function handleExcluir(cliente) {
     if (!podeGerenciarClientes) {
       alert("Você não tem permissão para excluir clientes.");
@@ -559,6 +854,94 @@ function Clientes() {
     } finally {
       setExcluindoId(null);
     }
+  }
+
+  async function handleExcluirRecadoCliente(recado) {
+    if (!podeGerenciarClientes) {
+      alert("Você não tem permissão para excluir recados.");
+      return;
+    }
+
+    const confirmou = window.confirm(
+      `Deseja realmente excluir o recado para "${recado.destinatarioNome}"?`,
+    );
+
+    if (!confirmou) return;
+
+    try {
+      setExcluindoRecadoId(recado.id);
+      await excluirRecado(recado.id, user?.uid || null);
+      await carregarRecadosDoCliente(clienteEditandoId);
+      if (recadoEditandoId === recado.id) {
+        limparFormularioRecado();
+      }
+    } catch (error) {
+      console.error("ERRO ao excluir recado do cliente:", error);
+      alert("Não foi possível excluir o recado do cliente.");
+    } finally {
+      setExcluindoRecadoId(null);
+    }
+  }
+
+  function abrirEdicaoRecadoCliente(recado) {
+    setRecadoEditandoId(recado.id);
+    setRecadoForm({
+      destinatarioUid: recado.destinatarioUid || "",
+      destinatarioNome: recado.destinatarioNome || "",
+      destinatarioRole: recado.destinatarioRole || "",
+      referenciaVinculo: recado.referenciaVinculo || "",
+      titulo: recado.titulo || "",
+      mensagem: recado.mensagem || "",
+      ativo: recado.ativo ?? true,
+    });
+    setErroRecado("");
+  }
+
+  async function abrirDetalhesCliente(cliente) {
+    if (!podeAbrirDetalhesCliente) return;
+
+    const destinatarioUid = modoVisualizacaoAtivo
+      ? usuarioVisualizado?.id || ""
+      : user?.uid || "";
+
+    setClienteDetalhes(cliente);
+    setModalDetalhesAberto(true);
+    setRecadosDetalhes([]);
+    setCarregandoDetalhes(true);
+
+    try {
+      if (!destinatarioUid) {
+        setRecadosDetalhes([]);
+        return;
+      }
+
+      const dadosRecados = await buscarRecados({
+        tipo: "cliente",
+        clienteId: cliente.id,
+        destinatarioUid,
+        somenteAtivos: true,
+      });
+
+      setRecadosDetalhes(dadosRecados);
+    } catch (error) {
+      console.error("ERRO ao buscar detalhes do cliente:", error);
+      setRecadosDetalhes([]);
+    } finally {
+      setCarregandoDetalhes(false);
+    }
+  }
+
+  function handleAbrirSistemaCliente(cliente) {
+    const url = String(cliente?.linkNossoSistema || "").trim();
+
+    if (!url) {
+      alert("Este cliente não possui link do sistema cadastrado.");
+      return;
+    }
+
+    abrirLinkComPost(url, {
+      acesso_externo: 1,
+    });
   }
 
   if (loading) {
@@ -674,6 +1057,24 @@ function Clientes() {
             </select>
           </div>
 
+          {podeGerenciarClientes ? (
+            <div className="field">
+              <label htmlFor="filtro-visualizar-como">Visualizar como</label>
+              <select
+                id="filtro-visualizar-como"
+                value={filtroVisualizarComo}
+                onChange={(event) => setFiltroVisualizarComo(event.target.value)}
+              >
+                <option value="Eu">Eu</option>
+                {usuariosVisualizacaoDisponiveis.map((usuarioItem) => (
+                  <option key={usuarioItem.id} value={usuarioItem.id}>
+                    {usuarioItem.nome} ({String(usuarioItem.roles || "").trim()})
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
           <div className="field">
             <label htmlFor="filtro-busca">Busca</label>
             <input
@@ -692,6 +1093,11 @@ function Clientes() {
           <div>
             <h3>Lista de clientes</h3>
             <p>{clientesFiltrados.length} cliente(s) encontrado(s)</p>
+            {modoVisualizacaoAtivo ? (
+              <p className="clientes-visualizando-como">
+                Visualizando como: <strong>{usuarioVisualizado?.nome}</strong>
+              </p>
+            ) : null}
           </div>
         </div>
 
@@ -723,7 +1129,7 @@ function Clientes() {
                     <th>Analista</th>
                     <th>Assistente</th>
                     <th>Operador</th>
-                    
+                    <th>Operador 2</th>
                     <th>Processamento</th>
                     <th>Folga fora</th>
                     <th>Tem diárias</th>
@@ -740,8 +1146,15 @@ function Clientes() {
                   {clientesFiltrados.map((cliente) => (
                     <tr
                       key={cliente.id}
-                      className={
-                        cliente.ativo ? "" : "clientes-table__row--inativo"
+                      className={`${cliente.ativo ? "" : "clientes-table__row--inativo"} ${
+                        podeAbrirDetalhesCliente
+                          ? "clientes-table__row--clickable"
+                          : ""
+                      }`}
+                      onClick={
+                        podeAbrirDetalhesCliente
+                          ? () => abrirDetalhesCliente(cliente)
+                          : undefined
                       }
                     >
                       {podeGerenciarClientes ? (
@@ -750,7 +1163,10 @@ function Clientes() {
                             <button
                               className="ghost-button"
                               type="button"
-                              onClick={() => abrirEdicao(cliente)}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                abrirEdicao(cliente);
+                              }}
                               disabled={excluindoId === cliente.id}
                             >
                               Editar
@@ -759,7 +1175,10 @@ function Clientes() {
                             <button
                               className="ghost-button"
                               type="button"
-                              onClick={() => handleExcluir(cliente)}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleExcluir(cliente);
+                              }}
                               disabled={excluindoId === cliente.id}
                             >
                               {excluindoId === cliente.id
@@ -782,7 +1201,7 @@ function Clientes() {
                         {cliente.assistenteNome || cliente.assistente || "-"}
                       </td>
                       <td>{cliente.operadorNome || cliente.operador || "-"}</td>
-                      
+                      <td>{cliente.operador2Nome || cliente.operador2 || "-"}</td>
 
                       <td>
                         <span className="clientes-badge">
@@ -826,7 +1245,12 @@ function Clientes() {
                   key={cliente.id}
                   className={`cliente-card ${
                     cliente.ativo ? "" : "cliente-card--inativo"
-                  }`}
+                  } ${podeAbrirDetalhesCliente ? "cliente-card--clickable" : ""}`}
+                  onClick={
+                    podeAbrirDetalhesCliente
+                      ? () => abrirDetalhesCliente(cliente)
+                      : undefined
+                  }
                 >
                   <div className="cliente-card__header">
                     <div>
@@ -839,7 +1263,10 @@ function Clientes() {
                         <button
                           className="ghost-button"
                           type="button"
-                          onClick={() => abrirEdicao(cliente)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            abrirEdicao(cliente);
+                          }}
                           disabled={excluindoId === cliente.id}
                         >
                           Editar
@@ -848,7 +1275,10 @@ function Clientes() {
                         <button
                           className="ghost-button"
                           type="button"
-                          onClick={() => handleExcluir(cliente)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleExcluir(cliente);
+                          }}
                           disabled={excluindoId === cliente.id}
                         >
                           {excluindoId === cliente.id
@@ -951,6 +1381,181 @@ function Clientes() {
           </>
         )}
       </div>
+
+      {modalDetalhesAberto && clienteDetalhes ? (
+        <div className="modal-backdrop" onClick={fecharModalDetalhes}>
+          <div
+            className="modal modal--medium"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal__header">
+              <div className="modal__title-group">
+                <p className="page-header__eyebrow">
+                  {modoVisualizacaoAtivo
+                    ? `Visualizando como ${usuarioVisualizado?.nome || ""}`
+                    : "Detalhes do cliente"}
+                </p>
+                <h3>{clienteDetalhes.nome}</h3>
+              </div>
+
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={fecharModalDetalhes}
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="clientes-detalhes">
+              <div className="clientes-detalhes__grid">
+                <div>
+                  <span>CNPJ</span>
+                  <strong>{formatarCNPJExibicao(clienteDetalhes.cnpj)}</strong>
+                </div>
+
+                <div>
+                  <span>Analista</span>
+                  <strong>
+                    {clienteDetalhes.analistaNome ||
+                      clienteDetalhes.analista ||
+                      "-"}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Assistente</span>
+                  <strong>
+                    {clienteDetalhes.assistenteNome ||
+                      clienteDetalhes.assistente ||
+                      "-"}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Operador</span>
+                  <strong>
+                    {clienteDetalhes.operadorNome ||
+                      clienteDetalhes.operador ||
+                      "-"}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Operador 2</span>
+                  <strong>
+                    {clienteDetalhes.operador2Nome ||
+                      clienteDetalhes.operador2 ||
+                      "-"}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Processamento</span>
+                  <strong>{clienteDetalhes.tipoProcessamento || "-"}</strong>
+                </div>
+
+                <div>
+                  <span>Folga fora</span>
+                  <strong>{booleanParaTexto(clienteDetalhes.folgaFora)}</strong>
+                </div>
+
+                <div>
+                  <span>Tem diárias</span>
+                  <strong>{booleanParaTexto(clienteDetalhes.temDiarias)}</strong>
+                </div>
+
+                <div>
+                  <span>Envio semanal</span>
+                  <strong>{booleanParaTexto(clienteDetalhes.envioSemanal)}</strong>
+                </div>
+
+                <div>
+                  <span>Cliente acessa sistema</span>
+                  <strong>
+                    {booleanParaTexto(clienteDetalhes.clienteAcessaSistema)}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Data de corte</span>
+                  <strong>Dia {clienteDetalhes.dataCorteDia || "-"}</strong>
+                </div>
+
+                <div>
+                  <span>Status</span>
+                  <strong>{clienteDetalhes.ativo ? "Ativo" : "Inativo"}</strong>
+                </div>
+              </div>
+
+              <div className="clientes-detalhes__blocos">
+                <div className="clientes-detalhes__bloco">
+                  <span>Observação</span>
+                  <p>{clienteDetalhes.observacao || "-"}</p>
+                </div>
+
+                <div className="clientes-detalhes__bloco">
+                  <span>Regra específica</span>
+                  <p>{clienteDetalhes.regraEspecifica || "-"}</p>
+                </div>
+
+                <div className="clientes-detalhes__bloco">
+                  <span>Link do sistema</span>
+                  <p>
+                    {clienteDetalhes.linkNossoSistema ? (
+                      <button
+                        type="button"
+                        className="primary-button"
+                        onClick={() => handleAbrirSistemaCliente(clienteDetalhes)}
+                      >
+                        Abrir sistema
+                      </button>
+                    ) : (
+                      "-"
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              <div className="clientes-detalhes__recados">
+                <div className="clientes-toolbar clientes-toolbar--interno">
+                  <div>
+                    <h3>
+                      {modoVisualizacaoAtivo
+                        ? `Recados para ${usuarioVisualizado?.nome || ""}`
+                        : "Recados para você"}
+                    </h3>
+                    <p>Recados vinculados especificamente a este cliente.</p>
+                  </div>
+                </div>
+
+                {carregandoDetalhes ? (
+                  <div className="clientes-feedback">
+                    <p>Carregando recados...</p>
+                  </div>
+                ) : recadosDetalhes.length === 0 ? (
+                  <div className="clientes-empty clientes-empty--compacto">
+                    <h4>Nenhum recado encontrado</h4>
+                    <p>Não há recados direcionados para este cliente.</p>
+                  </div>
+                ) : (
+                  <div className="clientes-recados-lista">
+                    {recadosDetalhes.map((recado) => (
+                      <article
+                        key={recado.id}
+                        className="clientes-recado-card"
+                      >
+                        {recado.titulo ? <strong>{recado.titulo}</strong> : null}
+                        <p>{recado.mensagem || "-"}</p>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {modalAberto ? (
         <div className="modal-backdrop" onClick={() => fecharModal()}>
@@ -1244,6 +1849,167 @@ function Clientes() {
                 </button>
               </div>
             </form>
+
+            {clienteEditandoId ? (
+              <div className="clientes-recados-admin">
+                <div className="clientes-toolbar clientes-toolbar--interno">
+                  <div>
+                    <h3>Recados do cliente</h3>
+                    <p>
+                      Cadastre recados direcionados aos vínculos deste cliente.
+                    </p>
+                  </div>
+                </div>
+
+                {carregandoRecadosCliente ? (
+                  <div className="clientes-feedback">
+                    <p>Carregando recados do cliente...</p>
+                  </div>
+                ) : recadosDoCliente.length === 0 ? (
+                  <div className="clientes-empty clientes-empty--compacto">
+                    <h4>Nenhum recado cadastrado</h4>
+                    <p>Adicione o primeiro recado deste cliente abaixo.</p>
+                  </div>
+                ) : (
+                  <div className="clientes-recados-admin__lista">
+                    {recadosDoCliente.map((recado) => (
+                      <article
+                        key={recado.id}
+                        className={`clientes-recado-admin-card ${
+                          recado.ativo ? "" : "clientes-recado-admin-card--inativo"
+                        }`}
+                      >
+                        <div className="clientes-recado-admin-card__header">
+                          <div>
+                            <strong>{obterLabelRecadoCliente(recado)}</strong>
+                            {recado.titulo ? <p>{recado.titulo}</p> : null}
+                          </div>
+
+                          <div className="clientes-actions">
+                            <button
+                              className="ghost-button"
+                              type="button"
+                              onClick={() => abrirEdicaoRecadoCliente(recado)}
+                              disabled={excluindoRecadoId === recado.id}
+                            >
+                              Editar
+                            </button>
+
+                            <button
+                              className="ghost-button"
+                              type="button"
+                              onClick={() => handleExcluirRecadoCliente(recado)}
+                              disabled={excluindoRecadoId === recado.id}
+                            >
+                              {excluindoRecadoId === recado.id
+                                ? "Excluindo..."
+                                : "Excluir"}
+                            </button>
+                          </div>
+                        </div>
+
+                        <p>{recado.mensagem || "-"}</p>
+                      </article>
+                    ))}
+                  </div>
+                )}
+
+                <form
+                  className="clientes-recado-form"
+                  onSubmit={handleSubmitRecadoCliente}
+                >
+                  <div className="form-grid">
+                    <div className="field">
+                      <label htmlFor="destinatarioUid">Recado para</label>
+                      <select
+                        id="destinatarioUid"
+                        name="destinatarioUid"
+                        value={recadoForm.destinatarioUid}
+                        onChange={handleDestinatarioRecadoChange}
+                      >
+                        <option value="">Selecione um vínculo</option>
+                        {destinatariosRecadoDisponiveis.map((item) => (
+                          <option key={`${item.key}-${item.uid}`} value={item.uid}>
+                            {item.label} - {item.nome}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="field">
+                      <label htmlFor="recadoTitulo">Título</label>
+                      <input
+                        id="recadoTitulo"
+                        name="titulo"
+                        type="text"
+                        value={recadoForm.titulo}
+                        onChange={handleRecadoChange}
+                        placeholder="Opcional"
+                      />
+                    </div>
+
+                    <div className="field">
+                      <label htmlFor="recadoAtivo">Status do recado</label>
+                      <select
+                        id="recadoAtivo"
+                        name="ativo"
+                        value={String(recadoForm.ativo)}
+                        onChange={(event) =>
+                          setRecadoForm((estadoAtual) => ({
+                            ...estadoAtual,
+                            ativo: event.target.value === "true",
+                          }))
+                        }
+                      >
+                        <option value="true">Ativo</option>
+                        <option value="false">Inativo</option>
+                      </select>
+                    </div>
+
+                    <div className="field field--full">
+                      <label htmlFor="recadoMensagem">Mensagem</label>
+                      <textarea
+                        id="recadoMensagem"
+                        name="mensagem"
+                        rows="4"
+                        value={recadoForm.mensagem}
+                        onChange={handleRecadoChange}
+                        placeholder="Digite o recado para aparecer no card do cliente"
+                      />
+                    </div>
+                  </div>
+
+                  {erroRecado ? (
+                    <div className="clientes-feedback clientes-feedback--erro">
+                      <p>{erroRecado}</p>
+                    </div>
+                  ) : null}
+
+                  <div className="modal__actions">
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={limparFormularioRecado}
+                      disabled={salvandoRecado}
+                    >
+                      Limpar recado
+                    </button>
+
+                    <button
+                      className="primary-button"
+                      type="submit"
+                      disabled={salvandoRecado}
+                    >
+                      {salvandoRecado
+                        ? "Salvando recado..."
+                        : recadoEditandoId
+                          ? "Salvar recado"
+                          : "Adicionar recado"}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}

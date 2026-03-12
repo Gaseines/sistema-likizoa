@@ -1,0 +1,147 @@
+.recados-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.recados-search {
+  width: min(420px, 100%);
+}
+
+.recados-feedback,
+.recados-empty {
+  padding: 1rem 0;
+}
+
+.recados-feedback--erro {
+  color: #b42318;
+}
+
+.recados-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.recados-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 900px;
+}
+
+.recados-table th,
+.recados-table td {
+  padding: 0.9rem 0.85rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  text-align: left;
+  vertical-align: top;
+}
+
+.recados-row--inativo {
+  opacity: 0.7;
+}
+
+.recados-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.recados-role-badge,
+.recados-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0.2rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.recados-role-badge {
+  background: rgba(0, 158, 241, 0.12);
+  color: #0067c2;
+}
+
+.recados-status-badge--ativo {
+  background: rgba(18, 183, 106, 0.12);
+  color: #067647;
+}
+
+.recados-status-badge--inativo {
+  background: rgba(180, 35, 24, 0.12);
+  color: #b42318;
+}
+
+.recados-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.recados-mobile-list {
+  display: none;
+  gap: 1rem;
+}
+
+.recado-card {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 18px;
+  padding: 1rem;
+  background: #fff;
+}
+
+.recado-card--inativo {
+  opacity: 0.7;
+}
+
+.recado-card__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.recado-card__header h4 {
+  margin: 0;
+}
+
+.recado-card__header p {
+  margin: 0.2rem 0 0;
+  color: #667085;
+}
+
+.recado-card__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.recado-card__grid span {
+  display: block;
+  font-size: 0.78rem;
+  color: #667085;
+  margin-bottom: 0.2rem;
+}
+
+.recado-card__grid strong {
+  display: block;
+}
+
+@media (max-width: 900px) {
+  .recados-table-wrapper {
+    display: none;
+  }
+
+  .recados-mobile-list {
+    display: grid;
+  }
+
+  .recado-card__grid {
+    grid-template-columns: 1fr;
+  }
+}

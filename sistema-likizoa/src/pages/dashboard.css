@@ -252,3 +252,125 @@
     grid-template-columns: 1fr;
   }
 }
+
+.dashboard-notices-card {
+  margin-bottom: 1rem;
+}
+
+.dashboard-notices-list {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.dashboard-notice-item {
+  padding: 1rem 1.1rem;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 18px;
+  background: #fbfbf8;
+}
+
+.dashboard-notice-item__title {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: #101828;
+}
+
+.dashboard-notice-item__text {
+  margin: 0;
+  color: #475467;
+  line-height: 1.55;
+}
+
+.dashboard-notices-card {
+  overflow: hidden;
+}
+
+.dashboard-postits-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 280px));
+  justify-content: start;
+  gap: 1.25rem;
+  margin-top: 0.5rem;
+}
+
+.dashboard-postit {
+  position: relative;
+  min-height: 190px;
+  padding: 1.4rem 1.2rem 1.2rem;
+  border-radius: 0.35rem;
+  box-shadow:
+    0 10px 18px rgba(0, 0, 0, 0.12),
+    0 2px 6px rgba(0, 0, 0, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.dashboard-postit:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow:
+    0 14px 24px rgba(0, 0, 0, 0.14),
+    0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.dashboard-postit:nth-child(4n + 1) {
+  background: #fff3a6;
+  transform: rotate(-1.5deg);
+}
+
+.dashboard-postit:nth-child(4n + 2) {
+  background: #ffd6de;
+  transform: rotate(1.2deg);
+}
+
+.dashboard-postit:nth-child(4n + 3) {
+  background: #d9f7be;
+  transform: rotate(-0.8deg);
+}
+
+.dashboard-postit:nth-child(4n + 4) {
+  background: #cfe8ff;
+  transform: rotate(1.6deg);
+}
+
+.dashboard-postit__tape {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-2deg);
+  width: 78px;
+  height: 24px;
+  border-radius: 0.2rem;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(120, 120, 120, 0.08);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(1px);
+}
+
+.dashboard-postit__title {
+  display: block;
+  margin-bottom: 0.75rem;
+  font-size: 1rem;
+  line-height: 1.2;
+  color: #2b2b2b;
+}
+
+.dashboard-postit__text {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: #3d3d3d;
+  white-space: pre-line;
+  word-break: break-word;
+}
+
+@media (max-width: 640px) {
+  .dashboard-postits-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-postit {
+    min-height: 160px;
+  }
+}

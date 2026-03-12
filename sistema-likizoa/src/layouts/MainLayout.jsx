@@ -43,6 +43,14 @@ function IconLinks() {
   );
 }
 
+function IconRecados() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-4 4v-4H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Zm2 4v2h10V9Zm0 4v2h7v-2Z" />
+    </svg>
+  );
+}
+
 function IconUsuarios() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -91,6 +99,12 @@ const menuItems = [
     icon: IconLinks,
   },
   {
+    label: "Recados",
+    path: "/recados",
+    moduleKey: "recados",
+    icon: IconRecados,
+  },
+  {
     label: "Usuários",
     path: "/usuarios",
     moduleKey: "usuarios",
@@ -99,7 +113,9 @@ const menuItems = [
 ];
 
 function formatarRole(role) {
-  const roleNormalizada = String(role || "").trim().toLowerCase();
+  const roleNormalizada = String(role || "")
+    .trim()
+    .toLowerCase();
 
   const mapa = {
     admin: "Admin",
@@ -153,7 +169,9 @@ function MainLayout() {
   }, [hasPermission]);
 
   const currentPageTitle = useMemo(() => {
-    const currentItem = menuItems.find((item) => item.path === location.pathname);
+    const currentItem = menuItems.find(
+      (item) => item.path === location.pathname,
+    );
     return currentItem?.label || "Likizoa";
   }, [location.pathname]);
 
@@ -222,8 +240,12 @@ function MainLayout() {
 
   function validarEmail() {
     const { currentPassword, newEmail } = emailForm;
-    const emailAtual = String(user?.email || "").trim().toLowerCase();
-    const emailNovo = String(newEmail || "").trim().toLowerCase();
+    const emailAtual = String(user?.email || "")
+      .trim()
+      .toLowerCase();
+    const emailNovo = String(newEmail || "")
+      .trim()
+      .toLowerCase();
 
     if (!String(currentPassword || "").trim()) {
       return "Preencha sua senha atual.";
@@ -290,7 +312,10 @@ function MainLayout() {
       setEmailError("");
       setEmailSuccess("");
 
-      await changeEmailUser(emailForm.currentPassword, emailForm.newEmail.trim());
+      await changeEmailUser(
+        emailForm.currentPassword,
+        emailForm.newEmail.trim(),
+      );
 
       setEmailSuccess(
         "Enviamos um link de confirmação para o novo e-mail. A troca só será concluída após a verificação.",
@@ -458,12 +483,16 @@ function MainLayout() {
           <div className="sidebar__footer-user">
             <strong>{userData?.nome || "Usuário"}</strong>
             <p>{user?.email || "Likizoa"}</p>
-            <span className="status-badge">{formatarRole(userData?.roles)}</span>
+            <span className="status-badge">
+              {formatarRole(userData?.roles)}
+            </span>
           </div>
         </div>
       </aside>
 
-      {menuOpen ? <div className="sidebar-backdrop" onClick={handleCloseMenu} /> : null}
+      {menuOpen ? (
+        <div className="sidebar-backdrop" onClick={handleCloseMenu} />
+      ) : null}
 
       <div className="content-area">
         <header className="topbar">
@@ -488,10 +517,14 @@ function MainLayout() {
               <button
                 className="user-chip user-chip--button"
                 type="button"
-                onClick={() => setProfileMenuOpen((estadoAtual) => !estadoAtual)}
+                onClick={() =>
+                  setProfileMenuOpen((estadoAtual) => !estadoAtual)
+                }
               >
                 <span className="user-chip__avatar">
-                  {(userData?.nome || user?.email || "L").charAt(0).toUpperCase()}
+                  {(userData?.nome || user?.email || "L")
+                    .charAt(0)
+                    .toUpperCase()}
                 </span>
 
                 <div className="user-chip__content">
@@ -575,11 +608,15 @@ function MainLayout() {
               <div className="profile-modal__section-title">
                 <h4>Alterar e-mail</h4>
                 <p>
-                  Você receberá um link de confirmação no novo e-mail antes da troca ser concluída.
+                  Você receberá um link de confirmação no novo e-mail antes da
+                  troca ser concluída.
                 </p>
               </div>
 
-              <form className="profile-password-form" onSubmit={handleSubmitEmail}>
+              <form
+                className="profile-password-form"
+                onSubmit={handleSubmitEmail}
+              >
                 <div className="form-grid">
                   <div className="field">
                     <label htmlFor="newEmail">Novo e-mail</label>
@@ -647,7 +684,10 @@ function MainLayout() {
                 <p>Somente a sua senha pode ser alterada por aqui.</p>
               </div>
 
-              <form className="profile-password-form" onSubmit={handleSubmitPassword}>
+              <form
+                className="profile-password-form"
+                onSubmit={handleSubmitPassword}
+              >
                 <div className="form-grid">
                   <div className="field field--full">
                     <label htmlFor="currentPassword">Senha atual</label>
@@ -674,7 +714,9 @@ function MainLayout() {
                   </div>
 
                   <div className="field">
-                    <label htmlFor="confirmPassword">Confirmar nova senha</label>
+                    <label htmlFor="confirmPassword">
+                      Confirmar nova senha
+                    </label>
                     <input
                       id="confirmPassword"
                       name="confirmPassword"

@@ -581,8 +581,7 @@ function Usuarios() {
               {usuarioEditandoId ? (
                 <div className="usuarios-note">
                   <p>
-                    Nesta versão, e-mail e senha do Auth ficam fora da edição do
-                    módulo.
+                    Não é possível editar e-mail e senha do usuário, apenas ele mesmo.
                   </p>
                 </div>
               ) : null}

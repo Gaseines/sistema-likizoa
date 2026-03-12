@@ -5,6 +5,7 @@ import "./dashboard.css";
 import { useAuth } from "../contexts/AuthContext";
 import { ehAdminOuGestor } from "../utils/permissoes";
 import { buscarClientes } from "../services/firebase/clientes";
+import { buscarRecados } from "../services/firebase/recados";
 
 function formatarData(data) {
   return new Intl.DateTimeFormat("pt-BR", {
@@ -49,14 +50,25 @@ function calcularProximoCorte(diaCorte) {
   };
 }
 
+function ehRoleOperacional(role) {
+  return ["operador", "analista", "assistente"].includes(
+    String(role || "")
+      .trim()
+      .toLowerCase(),
+  );
+}
+
 function Dashboard() {
   const { user, userData, loading, hasPermission } = useAuth();
 
   const [clientes, setClientes] = useState([]);
+  const [recadosDashboard, setRecadosDashboard] = useState([]);
   const [carregandoResumo, setCarregandoResumo] = useState(true);
   const [erroResumo, setErroResumo] = useState("");
 
   const podeGerenciarTudo = ehAdminOuGestor(userData);
+  const deveMostrarRecadosDashboard =
+    !podeGerenciarTudo && ehRoleOperacional(userData?.roles);
 
   useEffect(() => {
     async function carregarResumo() {
@@ -64,13 +76,30 @@ function Dashboard() {
         setCarregandoResumo(true);
         setErroResumo("");
 
-        const dadosClientes = await buscarClientes({
-          role: userData?.roles,
-          uid: user?.uid,
-          isAdminOuGestor: podeGerenciarTudo,
-        });
+        const promessas = [
+          buscarClientes({
+            role: userData?.roles,
+            uid: user?.uid,
+            isAdminOuGestor: podeGerenciarTudo,
+          }),
+        ];
+
+        if (deveMostrarRecadosDashboard && user?.uid) {
+          promessas.push(
+            buscarRecados({
+              tipo: "dashboard",
+              destinatarioUid: user.uid,
+              somenteAtivos: true,
+            }),
+          );
+        } else {
+          promessas.push(Promise.resolve([]));
+        }
+
+        const [dadosClientes, dadosRecados] = await Promise.all(promessas);
 
         setClientes(dadosClientes);
+        setRecadosDashboard(dadosRecados);
       } catch (error) {
         console.error("ERRO ao carregar dashboard:", error);
         setErroResumo("Não foi possível carregar os dados do dashboard.");
@@ -82,7 +111,13 @@ function Dashboard() {
     if (!loading) {
       carregarResumo();
     }
-  }, [loading, user?.uid, userData?.roles, podeGerenciarTudo]);
+  }, [
+    loading,
+    user?.uid,
+    userData?.roles,
+    podeGerenciarTudo,
+    deveMostrarRecadosDashboard,
+  ]);
 
   const cardsResumo = useMemo(() => {
     return [
@@ -147,6 +182,12 @@ function Dashboard() {
         to: "/links",
       },
       {
+        key: "recados",
+        titulo: "Recados",
+        descricao: "Recados gerais para os usuários do sistema",
+        to: "/recados",
+      },
+      {
         key: "usuarios",
         titulo: "Usuários",
         descricao: "Permissões, roles e status",
@@ -196,6 +237,42 @@ function Dashboard() {
         </div>
       ) : (
         <>
+          {deveMostrarRecadosDashboard && recadosDashboard.length > 0 ? (
+            <div className="card dashboard-notices-card">
+              <div className="dashboard-section-header">
+                <div>
+                  <h3>Recados</h3>
+                  <p>Mensagens direcionadas ao seu usuário.</p>
+                </div>
+              </div>
+
+              <div className="dashboard-postits-grid">
+                {recadosDashboard.map((recado) => (
+                  <article key={recado.id} className="dashboard-postit">
+                    <span
+                      className="dashboard-postit__tape"
+                      aria-hidden="true"
+                    />
+
+                    {recado.titulo ? (
+                      <strong className="dashboard-postit__title">
+                        {recado.titulo}
+                      </strong>
+                    ) : (
+                      <strong className="dashboard-postit__title">
+                        Recado
+                      </strong>
+                    )}
+
+                    <p className="dashboard-postit__text">
+                      {recado.mensagem || "-"}
+                    </p>
+                  </article>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           <div className="dashboard-stats-grid">
             {cardsResumo.map((card) => (
               <div key={card.label} className="card dashboard-stat-card">
@@ -247,7 +324,9 @@ function Dashboard() {
                               <strong>{cliente.nome}</strong>
                             </div>
                           </td>
-                          <td>{cliente.analistaNome || cliente.analista || "-"}</td>
+                          <td>
+                            {cliente.analistaNome || cliente.analista || "-"}
+                          </td>
                           <td>{cliente.tipoProcessamento || "-"}</td>
                           <td>Dia {cliente.dataCorteDia || "-"}</td>
                           <td>{formatarData(cliente.proximaDataCorte)}</td>
@@ -287,7 +366,9 @@ function Dashboard() {
 
                         <div>
                           <span>Próxima ocorrência</span>
-                          <strong>{formatarData(cliente.proximaDataCorte)}</strong>
+                          <strong>
+                            {formatarData(cliente.proximaDataCorte)}
+                          </strong>
                         </div>
 
                         <div>
