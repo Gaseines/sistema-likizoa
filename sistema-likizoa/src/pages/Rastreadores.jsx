@@ -28,6 +28,10 @@ function validarEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim());
 }
 
+function obterLinkAcesso(registro) {
+  return String(registro?.linkAcesso || registro?.urlAcesso || "").trim();
+}
+
 function normalizarTexto(valor) {
   return String(valor || "")
     .trim()
@@ -390,16 +394,8 @@ function Rastreadores() {
       return "Preencha pelo menos o e-mail ou o login.";
     }
 
-    if (email && !validarEmail(email)) {
-      return "Informe um e-mail válido.";
-    }
-
     if (login && !senha) {
       return "Ao informar o login, a senha também é obrigatória.";
-    }
-
-    if (!form.linkAcesso.trim()) {
-      return "Preencha o link de acesso.";
     }
 
     return "";
@@ -706,10 +702,10 @@ function Rastreadores() {
                       </td>
 
                       <td>
-                        {registro.linkAcesso || registro.urlAcesso ? (
+                        {obterLinkAcesso(registro) ? (
                           <a
                             className="rastreadores-link"
-                            href={registro.linkAcesso || registro.urlAcesso}
+                            href={obterLinkAcesso(registro)}
                             target="_blank"
                             rel="noreferrer"
                           >
@@ -863,10 +859,10 @@ function Rastreadores() {
                     <div>
                       <span>Link</span>
                       <strong>
-                        {registro.linkAcesso || registro.urlAcesso ? (
+                        {obterLinkAcesso(registro) ? (
                           <a
                             className="rastreadores-link"
-                            href={registro.linkAcesso || registro.urlAcesso}
+                            href={obterLinkAcesso(registro)}
                             target="_blank"
                             rel="noreferrer"
                           >
@@ -952,7 +948,7 @@ function Rastreadores() {
                   <input
                     id="email"
                     name="email"
-                    type="email"
+                    type="text"
                     value={form.email}
                     onChange={handleChange}
                     placeholder="Opcional se houver login"
@@ -1031,7 +1027,7 @@ function Rastreadores() {
 
                 <div className="field field--full">
                   <label htmlFor="linkAcesso">
-                    Link para acessar o rastreador
+                    Link para acessar o rastreador (opcional)
                   </label>
                   <input
                     id="linkAcesso"

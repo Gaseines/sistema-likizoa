@@ -140,7 +140,7 @@ function podeAssumirFuncaoNoCliente(usuario, funcao) {
   }
 
   if (funcao === "assistente") {
-    return ["assistente", "gestor", "admin"].includes(role);
+    return ["assistente","operador", "analista", "gestor", "admin"].includes(role);
   }
 
   return false;
